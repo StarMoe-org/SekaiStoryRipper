@@ -1284,8 +1284,11 @@ dependencies = [
 name = "ripper-resolve"
 version = "0.1.0"
 dependencies = [
+ "ripper-format",
  "serde",
+ "serde_json",
  "serde_yaml_ng",
+ "thiserror",
 ]
 
 [[package]]
