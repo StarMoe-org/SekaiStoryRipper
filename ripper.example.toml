@@ -1,0 +1,40 @@
+# SekaiStoryRipper configuration. Copy to `ripper.toml` (git-ignored) and edit.
+# Every value below is the built-in default; delete what you do not change.
+
+[cdn]
+hosts = [
+    "https://lf3-mkcncdn-tos.dailygn.com",
+    "https://lf6-mkcncdn-tos.dailygn.com",
+    "https://lf9-mkcncdn-tos.dailygn.com",
+    "https://lf26-mkcncdn-tos.dailygn.com",
+]
+app_version = "6.4.0"
+# asset_version = 10        # pin ios{N}; by default the CDN `version` file is read first
+app_id = "gdl_app_5236"
+channel = "cn_online"
+platform = "ios"
+user_agent = "cn/4424 CFNetwork/3896.100.1.1.1 Darwin/27.0.0"
+unity_version = "2022.3.62f3"
+concurrency = 8
+retries = 4
+timeout_secs = 600
+
+[crypto]
+# The ABCrypt manifest key/IV are not shipped with this tool. Extract them from a client you
+# legitimately own and set them here or via RIPPER_AB_KEY / RIPPER_AB_IV
+# (16-character strings or 32 hex digits).
+# ab_key = ""
+# ab_iv = ""
+
+[masterdata]
+url_template = "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-sc-master/HEAD/master/{name}.json"
+
+[paths]
+cache = "cache"
+out = "out"
+
+[unity]
+version = "2022.3.62f3"
+
+[tools]
+ffmpeg = "ffmpeg"

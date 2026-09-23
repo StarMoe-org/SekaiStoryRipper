@@ -20,7 +20,7 @@ jobs:
           - { runner: linux-arm64, target: aarch64-unknown-linux-musl }
     env:
       CARGO_TERM_COLOR: always
-      # zstd-sys (a C dependency of unity-rs-core) needs a musl C compiler on Linux.
+      # zstd-sys (via unity-rs-core) and ring (via rustls) compile C/asm and need a musl C compiler on Linux.
       CC_x86_64_unknown_linux_musl: musl-gcc
       CC_aarch64_unknown_linux_musl: musl-gcc
     steps:
