@@ -1,3 +1,4 @@
+mod audio_lookup;
 mod config;
 mod fetch_cmd;
 mod manifest_cmd;

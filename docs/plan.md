@@ -416,15 +416,15 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 - **Q1** CDN bundle 里的 ScenarioSceneData、Live2DBuildMotionMetaData、BuildModelData、BuildMotionData 是否**内嵌 typetree**？如果没有，要从 dump.cs 生成外部 schema（unity-rs 支持）。 → ✅ 已答（M0 S3）：全部内嵌，不需要外部 schema。
 - **Q2** BuildModelData 或 model3.json 里有没有指向动作包的字段？ → ✅ 已答（RE-R01）：没有。
 - **Q3** CN 卡面剧情的剧本 bundle 路径是什么：`character/member_scenario/<ab>` 还是 `character/member/<ab>`？清单里 `character/member` 有 1352 个。 → ✅ 已答（RE-R01）：`character/member/<cards[cardId].assetbundleName>`。
-- **Q4** `vs<ScenarioId>` 语音包和 `part_voice*` 的规则是什么？sekai-viewer 里的 ScenarioId→bundle 修正（活动 167–176 加 1 等）在 CN 上是否成立？
-- **Q5** `IncludeSoundDataBundleNames`（例如 `scenario/effect/hologram`）里是不是带 ACB？ → ✅ 已答（M0）：`hologram` 里没有 ACB；`IncludeSoundDataBundleNames` 的含义仍待确认。
+- **Q4** `vs<ScenarioId>` 语音包和 `part_voice*` 的规则是什么？sekai-viewer 里的 ScenarioId→bundle 修正（活动 167–176 加 1 等）在 CN 上是否成立？ → ✅ 已答：见 `docs/reverse/cn-6.4.0/story-asset-rules.md` §2（用 masterdata scenarioId；`vs*` 就是普通语音包；part_voice 规则加 cue 索引兜底；sekai-viewer 的 +1 修正在 CN 不成立）。
+- **Q5** `IncludeSoundDataBundleNames`（例如 `scenario/effect/hologram`）里是不是带 ACB？ → ✅ 已答（M0）：`hologram` 里没有 ACB；`IncludeSoundDataBundleNames` 的含义仍待确认。 → 补充：`IncludeSoundDataBundleNames` 就是特效 prefab 的预加载清单，与 ACB 无关（story-asset-rules.md §4）。
 - **Q6** cridecoder 能否读出 ACB 的 block、AISAC、循环点？它对 HCA v3 + HFR 的解码是否正确（对照 vgmstream 或 hca.py）？ → ⚠️ 部分已答（M0）：block/AISAC 表完整导出，HCA 循环点能读到；分块 BGM 必须按 waveform 导出；PCM 极性和 v3 正确性待 vgmstream 裁定（第四批决策：推迟到 M4）。
 - **Q7** scenario/movie 里 USM 的视频编码是什么（VP9、H.264 还是 MPEG-1），有几条音轨？ → ✅ 已答（M0）：按 MovieBundleBuildData 拆片；视频 MPEG-1，音频 CRI ADX。
 - **Q8** unity-rs-core 实测：显式版本覆盖能否处理抹成 `5.x.x` 的头；能否拿到 AnimationClip 完整的 `m_MuscleClip`、`m_ClipBindingConstant`、`m_Events` 原始字段；ASTC 解码是否和 astcenc 一致。 → ✅ 已答（M0 S1/S4/S5）：全部可以。
 - **Q9** StreamedClip 末尾是否有 +FLT_MAX 哨兵帧；2022.3.62 下 curveCount 是 u16 还是 u32（AssetStudio 按 2022.3.19 以上 u16 处理）。 → ✅ 已答（M0）：末尾有 +∞ 哨兵帧；curveCount 和 discreteCurveCount 是两个独立字段。
 - **Q10** m_Events 里除了 eyeblink，还有没有别的 functionName 或 data 前缀？
 - **Q11** 名字里带 `_back`、`v2_`、`clb01_` 的模型在剧本里怎么出现（和 D10 相关）。 → ✅ 已答（RE-R01）：都是独立的 character2d 条目。
-- **Q12** haruki masterdata 相对 CDN 的更新延迟；卡面剧情要用的 `cards.assetbundleName` 在不在里面。
+- **Q12** haruki masterdata 相对 CDN 的更新延迟；卡面剧情要用的 `cards.assetbundleName` 在不在里面。 → 部分已答：masterdata 比 CDN 略滞后，cards 缺若干新卡（story-asset-rules.md §5）。
 - **Q13** 清单里的 `crc` 是哪种算法、针对什么内容（混淆前还是混淆后），能否用来做完整性校验。 → ✅ 已答（M0 S8）：按顺序拼接全部解压后的条目，再算 CRC32。
 - **Q14** CN 客户端的服务条款对个人解包和复刻的约束（这是法律问题，由你判断）。
 - **Q16** Gitea 上需要注册 4 个平台的 Gitea Actions runner（标签见第四批决策）。目前仓库和用户级 runner 都是 0 个。
