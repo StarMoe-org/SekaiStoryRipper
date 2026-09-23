@@ -3,7 +3,7 @@
 为 **Project Sekai（CN 服 6.4.0，Unity 2022.3.62f3，iOS）** 的剧情回放抓取并解包所需资产的独立工具。
 下游消费者是 [SekaiStoryExporter](https://github.com/StarMoe-org/SekaiStoryExporter)（sse）。
 
-> 状态：**M2 核心完成**：CDN 下载与缓存（M1），以及 bundle 解包到 library（M2）。M0 结论见 [`docs/spike/M0-report.md`](docs/spike/M0-report.md)。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
+> 状态：**v0.1.0**：可以按剧集导出剧情回放所需的全部资源（主线、活动、卡面、特别篇）。M0 结论见 [`docs/spike/M0-report.md`](docs/spike/M0-report.md)。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
 
 ## 做什么
 
@@ -12,6 +12,25 @@
 3. 把 bundle 解成 sse 可以直接消费的**无损、版本化**中间格式。动作（AnimationClip）保留 StreamedClip 的原始多项式系数，**不转成 motion3**。
 
 ## 用法
+
+最常用的是 `rip`：按剧集选择器导出一话需要的全部资源。
+
+```bash
+export RIPPER_AB_KEY=...  RIPPER_AB_IV=...   # 清单解密 key，需自行从合法持有的客户端取得（D4）
+ripper manifest                              # 拉取并归档清单（每次游戏热更后运行一次）
+ripper rip unit:school-refusal-story-chapter/1 event:120 card:1 special:2
+ripper rip unit:all --report rip-report.json
+ripper plan all --report plan.json           # 只做规划：列出需要的 bundle 和 warning，不下载资源本体
+```
+
+选择器：`unit:<章节 assetbundleName>[/<话>]`、`event:<eventId>[/<话 或 范围 1-4>]`、`card:<cardId>[/first|second]`、`special:<specialStoryId>[/<话>]`、`scenario:<scenarioId>`、`unit:all`、`all`。
+
+输出：
+- `out/library/<bundleName>/…`：解包后的资源，布局见下文；
+- `out/episodes/<type>/<key>/<no>.json`：`ripper-episode` v1 索引，给出这一话用到的剧本、角色（模型、动作包、按游戏规则解析好的「动作名 → clip」）、背景、BGM、SE、语音、影片、特效，路径都相对 `out/library/`；
+- `out/ripper.lock.json`：本次导出所用的工具版本、各格式版本、app/CDN/Unity 版本和 masterdata 来源。
+
+底层命令：
 
 ```bash
 cp ripper.example.toml ripper.toml        # 按需修改；ripper.toml 已被 git 忽略

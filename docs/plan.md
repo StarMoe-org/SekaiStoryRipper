@@ -211,7 +211,7 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 - **M2** ✅ 核心完成（2026-09-23）：`ripper unpack`，解包 TextAsset、Texture2D→PNG、MonoBehaviour→JSON、AnimationClip→sse-motion。
   - 增量：记录里 crc 或格式版本变化时重新解包；记录里的未解析 binding 哈希在有新模型后变得可解析时，也会重新解包。
   - D8 可选的 `.astc` 已实现（`--keep-astc`：mip0 数据块加标准 16 字节头，保持 Unity 行序）；oracle 对照已改为直接针对 library（`tools/oracle/library/`）。
-- **M3**：masterdata 源、resolver、`plan` / `rip`、episode 索引、`ripper.lock.json`。
+- **M3** ✅（2026-09-23）：`ripper masterdata`、解析器（`ripper-resolve`：catalog、selector、rules、references、plan、index）、`ripper plan` / `ripper rip`、episode 索引（`ripper-episode` v1）、`ripper.lock.json`。命名规则见 `docs/reverse/cn-6.4.0/story-asset-rules.md`。
 - **M4** ✅ 解包部分完成（2026-09-23）：ACB 每个物理 waveform 输出一个 WAV，`<x>.cues.json`（`ripper-acb` v1，cue 名取自 CueNameTable，按 track 顺序引用 waveform），`<x>.tables.json`（全部 UTF 表），并保留原始 ACB。实测分块 BGM `bgm90001` 为 1 个 cue、262 次 track 引用、185 个 waveform。SE 权威索引在 M3 的解析器里实现。HCA 的极性和 v3 验证仍待 vgmstream（S6）。
 - **M5** ✅ 解包部分完成（2026-09-23）：
   - 影片按 MovieBundleBuildData 拼接分片后解复用（`.m2v` + `.adx`），ADX 经 ffmpeg 转成 `.wav`；
@@ -219,7 +219,11 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
   - Font 对象导出原始 `.otf`/`.ttf`；
   - 同一 container 路径下的多个对象（TMP FontAsset、atlas、材质）以 `<stem>.<名字>.<pathId>` 命名。
   `sync` 增量归入 M3 的 `rip`。
-- **M6**：全量回归（2650 个剧本）、`ripper-format` crate 发布给 sse。
+- **M6** ✅ v0.1.0 的回归（2026-09-23）：
+  - `plan` 覆盖主线、活动、特别篇全部 1807 话：1806 话规划成功，1 话没有剧本（`op_03` 在清单里不存在）。共 4545 个 bundle、9.4 GB；warning 全部是已知的游戏数据问题，或只在 `rip` 阶段才能解析的 partvoice。
+  - `rip unit:all` 加上活动、特别篇、卡面各类型的抽样，共 129 话：31,979 条文件引用全部存在；UnityPy oracle 全部通过（动作 8,617 个、PNG 245 张、TextAsset 562 个、typetree 575 份）。
+  - 活动全量 rip（8.8 GB 下载，解开后体积还要翻几倍）受本机磁盘空间限制没有跑。
+  - `ripper-format` 已作为独立 crate，sse 可以通过 git 依赖使用。
 
 ---
 
