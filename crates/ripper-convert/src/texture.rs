@@ -27,9 +27,46 @@ pub fn encode_png(image: &RgbaImage) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// Wraps mip 0 of an ASTC texture (Unity formats 48–59) in a standard `.astc` file: 16-byte header
+/// (magic `0x5CA1AB13`, block size, 24-bit extents) followed by the blocks. Rows stay in Unity's
+/// bottom-up order. `None` for non-ASTC formats.
+pub fn astc_file(raw: &ripper_unity::RawTexture) -> Option<Vec<u8>> {
+    if !(48..=59).contains(&raw.format) {
+        return None;
+    }
+    let block = [4u32, 5, 6, 8, 10, 12][((raw.format - 48) % 6) as usize];
+    let mip0 = raw.width.div_ceil(block) as usize * raw.height.div_ceil(block) as usize * 16;
+    let blocks = raw.data.get(..mip0)?;
+    let mut out = Vec::with_capacity(16 + mip0);
+    out.extend_from_slice(&0x5CA1_AB13u32.to_le_bytes());
+    out.extend_from_slice(&[block as u8, block as u8, 1]);
+    for extent in [raw.width, raw.height, 1] {
+        out.extend_from_slice(&extent.to_le_bytes()[..3]);
+    }
+    out.extend_from_slice(blocks);
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wraps_astc_mip0_with_a_standard_header() {
+        let raw = ripper_unity::RawTexture {
+            width: 12,
+            height: 7,
+            format: 50,
+            data: vec![7; 2 * 2 * 16 + 100],
+        };
+        let file = astc_file(&raw).unwrap();
+        assert_eq!(&file[..4], &[0x13, 0xAB, 0xA1, 0x5C]);
+        assert_eq!(&file[4..7], &[6, 6, 1]);
+        assert_eq!(&file[7..10], &[12, 0, 0]);
+        assert_eq!(&file[10..13], &[7, 0, 0]);
+        assert_eq!(file.len(), 16 + 64);
+        assert!(astc_file(&ripper_unity::RawTexture { format: 4, ..raw }).is_none());
+    }
 
     #[test]
     fn encodes_and_rejects_wrong_sizes() {

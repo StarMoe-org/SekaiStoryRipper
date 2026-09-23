@@ -150,6 +150,20 @@ impl CdnClient {
         Ok(body.to_vec())
     }
 
+    /// GETs an arbitrary URL once per configured retry (used for masterdata, which is not on the CDN).
+    pub async fn get_url(&self, url: &str) -> Result<Vec<u8>, CdnError> {
+        let mut attempt = 0u32;
+        loop {
+            match self.get_once(url, None).await {
+                Err(error) if error.is_transient() && attempt < self.config.retries => {
+                    tokio::time::sleep(Duration::from_millis(500 << attempt.min(6))).await;
+                    attempt += 1;
+                }
+                other => return other,
+            }
+        }
+    }
+
     /// Current CDN asset version `N` (the `version` file), unless pinned in the config.
     pub async fn asset_version(&self) -> Result<u32, CdnError> {
         if let Some(version) = self.config.asset_version {

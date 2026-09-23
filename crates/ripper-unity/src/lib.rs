@@ -13,11 +13,13 @@ pub const DEFAULT_UNITY_VERSION: &str = "2022.3.62f3";
 
 /// Unity class ids used by the story assets.
 pub mod class_id {
+    pub const GAME_OBJECT: i32 = 1;
     pub const TEXTURE_2D: i32 = 28;
     pub const TEXT_ASSET: i32 = 49;
     pub const ANIMATION_CLIP: i32 = 74;
     pub const MONO_BEHAVIOUR: i32 = 114;
     pub const MONO_SCRIPT: i32 = 115;
+    pub const FONT: i32 = 128;
     pub const ASSET_BUNDLE: i32 = 142;
     pub const SPRITE: i32 = 213;
 }
@@ -58,6 +60,16 @@ pub struct ContainerEntry {
     pub id: ObjectId,
 }
 
+/// A `Texture2D`'s stored (still compressed) image data, all mips, in Unity's bottom-up row order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawTexture {
+    pub width: u32,
+    pub height: u32,
+    /// Unity `TextureFormat` id (50 = ASTC_RGB_6x6).
+    pub format: i32,
+    pub data: Vec<u8>,
+}
+
 /// Tightly packed RGBA8 pixels, top row first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RgbaImage {
@@ -78,8 +90,14 @@ pub trait BundleSource: Sized {
     /// Decodes mip 0 of a `Texture2D`.
     fn texture_rgba(&self, id: ObjectId) -> Result<RgbaImage>;
 
+    /// The stored image data of a `Texture2D`, without decoding.
+    fn texture_raw(&self, id: ObjectId) -> Result<RawTexture>;
+
     /// Raw `m_Script` bytes of a `TextAsset` (moc3, json, acb, ...).
     fn text_asset(&self, id: ObjectId) -> Result<Vec<u8>>;
+
+    /// The embedded font file of a `Font` and its suggested extension (`ttf`/`otf`).
+    fn font_file(&self, id: ObjectId) -> Result<(Vec<u8>, String)>;
 
     /// CRC32 over the decompressed bundle entries in storage order; equals the manifest `crc`.
     fn content_crc32(&self) -> Result<u32>;

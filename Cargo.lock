@@ -1249,10 +1249,12 @@ dependencies = [
  "ripper-cdn",
  "ripper-convert",
  "ripper-format",
+ "ripper-resolve",
  "ripper-unity",
  "rmp-serde",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "toml",
 ]
@@ -1284,8 +1286,11 @@ dependencies = [
 name = "ripper-resolve"
 version = "0.1.0"
 dependencies = [
+ "ripper-format",
  "serde",
+ "serde_json",
  "serde_yaml_ng",
+ "thiserror",
 ]
 
 [[package]]

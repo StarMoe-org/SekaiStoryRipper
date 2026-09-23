@@ -64,3 +64,38 @@ pub fn demux_usm(usm: &[u8], fallback_name: &str) -> Result<Vec<UsmStream>> {
         })
         .collect())
 }
+
+/// Converts a demultiplexed CRI ADX stream to PCM16 WAV with an external ffmpeg (decision: M5 uses
+/// ffmpeg for ADX; cridecoder only demultiplexes it).
+pub fn adx_to_wav(
+    ffmpeg: &std::path::Path,
+    adx: &std::path::Path,
+    wav: &std::path::Path,
+) -> Result<()> {
+    let output = std::process::Command::new(ffmpeg)
+        .args(["-v", "error", "-nostdin", "-y", "-i"])
+        .arg(adx)
+        .args(["-c:a", "pcm_s16le"])
+        .arg(wav)
+        .output()
+        .map_err(|error| ConvertError::Cri(format!("running {}: {error}", ffmpeg.display())))?;
+    if !output.status.success() {
+        return Err(ConvertError::Cri(format!(
+            "ffmpeg failed on {}: {}",
+            adx.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
+/// The configured ffmpeg if it runs (`ffmpeg -version`), else `None`.
+pub fn find_ffmpeg(configured: &std::path::Path) -> Option<std::path::PathBuf> {
+    let ok = std::process::Command::new(configured)
+        .arg("-version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success());
+    ok.then(|| configured.to_path_buf())
+}

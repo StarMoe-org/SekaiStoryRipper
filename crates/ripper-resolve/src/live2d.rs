@@ -45,6 +45,22 @@ pub fn motion_bundle(asset_name: &str) -> String {
     format!("{MOTION_BUNDLE_PREFIX}{asset_name}{MOTION_BUNDLE_SUFFIX}")
 }
 
+/// Model key used at playback when `AppearCharacters[].CostumeType` is empty (yaml
+/// `live2d.empty_costume_fallback`, `GetExceptionCostumeKey @0x16E1960`): `"{id:D3}_casual"`,
+/// with id 0 taken as 1. Never fires on 6.4.0 data, and no such model bundle exists.
+pub fn empty_costume_model_key(character2d_id: i64) -> String {
+    let id = if character2d_id == 0 {
+        1
+    } else {
+        character2d_id
+    };
+    if id < 0 {
+        format!("-{:03}_casual", id.unsigned_abs())
+    } else {
+        format!("{id:03}_casual")
+    }
+}
+
 /// The download builder treats `Character2dId <= 1` as 1 (`csinc` at `@0x16984B8`).
 pub fn download_character2d_id(character2d_id: i64) -> i64 {
     if character2d_id > 1 {
@@ -113,6 +129,18 @@ mod tests {
             })
             .collect();
         assert_eq!(order, expected);
+    }
+
+    #[test]
+    fn empty_costume_fallback_matches_the_yaml() {
+        assert_eq!(
+            yaml_value("live2d.empty_costume_fallback").as_str(),
+            Some("{Character2dId:D3}_casual")
+        );
+        assert_eq!(empty_costume_model_key(0), "001_casual");
+        assert_eq!(empty_costume_model_key(17), "017_casual");
+        assert_eq!(empty_costume_model_key(1086), "1086_casual");
+        assert_eq!(empty_costume_model_key(-5), "-005_casual");
     }
 
     #[test]

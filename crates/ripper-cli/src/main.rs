@@ -1,7 +1,9 @@
+mod audio_lookup;
 mod config;
 mod fetch_cmd;
 mod manifest_cmd;
-mod spike;
+mod masterdata_cmd;
+mod story_cmd;
 mod unpack_cmd;
 
 use std::path::PathBuf;
@@ -47,6 +49,45 @@ enum Command {
         #[arg(long)]
         diff_out: Option<PathBuf>,
     },
+    /// Resolve story episodes to the bundles they need (fetches only scenario bundles).
+    Plan {
+        /// e.g. unit:school-refusal-story-chapter/1, event:120/1-4, card:1, special:2, scenario:<id>, all.
+        #[arg(required = true)]
+        selectors: Vec<String>,
+        #[arg(long)]
+        asset_version: Option<u32>,
+        /// Write every plan as JSON.
+        #[arg(long)]
+        report: Option<PathBuf>,
+        /// Fail when any episode has warnings.
+        #[arg(long)]
+        strict: bool,
+    },
+    /// Export episodes completely: fetch + unpack every bundle they need and write episode indexes.
+    Rip {
+        #[arg(required = true)]
+        selectors: Vec<String>,
+        #[arg(long)]
+        asset_version: Option<u32>,
+        /// Write a per-episode summary as JSON.
+        #[arg(long)]
+        report: Option<PathBuf>,
+        /// Fail when any episode has warnings.
+        #[arg(long)]
+        strict: bool,
+        /// Unpack again even when the library already holds the bundle content.
+        #[arg(long)]
+        force: bool,
+        /// Also keep ASTC textures' original blocks as .astc files.
+        #[arg(long)]
+        keep_astc: bool,
+    },
+    /// Fetch the masterdata tables the resolver needs (from masterdata.url_template) into the cache.
+    Masterdata {
+        /// Re-download tables that are already cached.
+        #[arg(long)]
+        refresh: bool,
+    },
     /// Download bundles into the cache (with their manifest dependencies), verifying length and CRC.
     Fetch {
         /// Exact bundle names, e.g. live2d/model/01ichika_normal.
@@ -77,14 +118,9 @@ enum Command {
         /// Unpack again even when the library already holds this bundle content.
         #[arg(long)]
         force: bool,
-    },
-    /// M0 spike: unpack every deobfuscated bundle under CACHE into OUT for oracle comparison.
-    Spike {
-        /// Directory of plain UnityFS bundles laid out as <cache>/<bundleName>.
-        cache: PathBuf,
-        out: PathBuf,
-        #[arg(long, default_value = ripper_unity::DEFAULT_UNITY_VERSION)]
-        unity_version: String,
+        /// Also keep ASTC textures' original blocks as .astc files next to the PNGs.
+        #[arg(long)]
+        keep_astc: bool,
     },
 }
 
@@ -135,12 +171,48 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        Command::Plan {
+            selectors,
+            asset_version,
+            report,
+            strict,
+        } => {
+            let args = story_cmd::Args {
+                selectors,
+                asset_version,
+                report,
+                strict,
+                force: false,
+                keep_astc: false,
+            };
+            story_cmd::run_plan(&config, args).await
+        }
+        Command::Rip {
+            selectors,
+            asset_version,
+            report,
+            strict,
+            force,
+            keep_astc,
+        } => {
+            let args = story_cmd::Args {
+                selectors,
+                asset_version,
+                report,
+                strict,
+                force,
+                keep_astc,
+            };
+            story_cmd::run_rip(&config, args).await
+        }
+        Command::Masterdata { refresh } => masterdata_cmd::run(&config, refresh).await,
         Command::Unpack {
             names,
             prefixes,
             asset_version,
             no_deps,
             force,
+            keep_astc,
         } => {
             unpack_cmd::run(
                 &config,
@@ -150,14 +222,10 @@ async fn main() -> anyhow::Result<()> {
                     asset_version,
                     no_deps,
                     force,
+                    keep_astc,
                 },
             )
             .await
         }
-        Command::Spike {
-            cache,
-            out,
-            unity_version,
-        } => tokio::task::spawn_blocking(move || spike::run(&cache, &out, &unity_version)).await?,
     }
 }

@@ -49,8 +49,24 @@ pub enum FileKind {
     Text,
     /// `Texture2D` decoded to RGBA PNG.
     Png,
+    /// ASTC texture's original blocks (mip 0) as a `.astc` file, Unity row order (opt-in).
+    Astc,
     /// `AnimationClip` as `sse-motion` JSON.
     Motion,
     /// Any other object's embedded typetree as JSON (ScenarioSceneData, BuildModelData, prefabs, ...).
     Typetree,
+    /// `<x>.cues.json` (`ripper-acb` index) of an ACB TextAsset.
+    AcbIndex,
+    /// `<x>.tables.json`: every UTF table of an ACB.
+    AcbTables,
+    /// A waveform of an ACB: WAV for HCA, raw otherwise.
+    Audio,
+    /// A demultiplexed stream of a story movie (`.m2v` video, `.adx` audio).
+    MovieStream,
+    /// A movie's ADX audio converted to WAV by ffmpeg.
+    MovieAudio,
+    /// A `Font`'s embedded font file (`.otf` / `.ttf`).
+    Font,
+    /// `_objects.json`: typetrees of every object in a bundle with GameObjects (effect prefabs).
+    ObjectGraph,
 }
