@@ -60,18 +60,75 @@ pub fn select(
         .collect())
 }
 
-pub async fn run(config: &Config, args: Args) -> Result<()> {
-    if args.names.is_empty() && args.prefixes.is_empty() {
-        bail!("name at least one bundle or --prefix");
-    }
-    let app = &config.cdn.app_version;
+/// Checks the manifest CRC over the decompressed bundle entries.
+pub fn crc_verifier() -> Verifier {
+    Arc::new(|entry: &BundleEntry, data: &[u8]| {
+        let crc = ripper_unity::content_crc32(&entry.bundle_name, data.to_vec())
+            .map_err(|e| e.to_string())?;
+        if crc == entry.crc {
+            Ok(())
+        } else {
+            Err(format!(
+                "content crc {crc:08x} != manifest {:08x}",
+                entry.crc
+            ))
+        }
+    })
+}
+
+/// Loads the latest archived manifest, or the given version.
+pub fn load_manifest(config: &Config, asset_version: Option<u32>) -> Result<(u32, Manifest)> {
     let store = ManifestStore::new(&config.paths.cache, &config.cdn.platform);
-    let (version, manifest) = match args.asset_version {
+    let app = &config.cdn.app_version;
+    Ok(match asset_version {
         Some(version) => (version, store.load(app, version)?),
         None => store
             .latest(app)?
             .context("no archived manifest; run `ripper manifest` first")?,
-    };
+    })
+}
+
+/// Downloads whatever of `entries` is not cached yet; fails if any bundle could not be fetched.
+pub async fn ensure_cached(config: &Config, entries: Vec<BundleEntry>, verify: bool) -> Result<()> {
+    let client = Arc::new(CdnClient::new(config.cdn.clone(), None)?);
+    let cache = Arc::new(BundleCache::new(&config.paths.cache));
+    let count = entries.len();
+    let mut done = 0usize;
+    let outcomes = fetch_all(
+        client,
+        cache,
+        entries,
+        verify.then(crc_verifier),
+        |outcome| {
+            done += 1;
+            if outcome.status != FetchStatus::Cached {
+                let status = match &outcome.status {
+                    FetchStatus::Downloaded { bytes } => {
+                        format!("downloaded {:.1} MB", *bytes as f64 / 1e6)
+                    }
+                    FetchStatus::Failed(reason) => format!("FAILED: {reason}"),
+                    FetchStatus::Cached => unreachable!(),
+                };
+                eprintln!("[{done}/{count}] {}: {status}", outcome.name);
+            }
+        },
+    )
+    .await;
+    let failed = outcomes
+        .iter()
+        .filter(|o| matches!(o.status, FetchStatus::Failed(_)))
+        .count();
+    if failed > 0 {
+        bail!("{failed} bundle(s) failed to download");
+    }
+    Ok(())
+}
+
+pub async fn run(config: &Config, args: Args) -> Result<()> {
+    if args.names.is_empty() && args.prefixes.is_empty() {
+        bail!("name at least one bundle or --prefix");
+    }
+    let (version, manifest) = load_manifest(config, args.asset_version)?;
     let entries = select(&manifest, &args.names, &args.prefixes, !args.no_deps)?;
     let total: u64 = entries.iter().map(|e| e.file_size).sum();
     eprintln!(
@@ -81,20 +138,7 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
         total as f64 / 1e6
     );
 
-    let verify: Option<Verifier> = (!args.no_verify).then(|| {
-        Arc::new(|entry: &BundleEntry, data: &[u8]| {
-            let crc = ripper_unity::content_crc32(&entry.bundle_name, data.to_vec())
-                .map_err(|e| e.to_string())?;
-            if crc == entry.crc {
-                Ok(())
-            } else {
-                Err(format!(
-                    "content crc {crc:08x} != manifest {:08x}",
-                    entry.crc
-                ))
-            }
-        }) as Verifier
-    });
+    let verify = (!args.no_verify).then(crc_verifier);
 
     let client = Arc::new(CdnClient::new(config.cdn.clone(), None)?);
     let cache = Arc::new(BundleCache::new(&config.paths.cache));

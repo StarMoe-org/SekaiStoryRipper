@@ -4,5 +4,8 @@
 //! version it does not know instead of guessing.
 
 pub mod motion;
+pub mod path;
+pub mod unpack;
 
 pub use motion::SseMotion;
+pub use unpack::UnpackRecord;

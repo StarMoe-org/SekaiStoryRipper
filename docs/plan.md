@@ -94,6 +94,11 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 
 ### 3.1 目录布局（共享库 + 每话索引，对齐 sse 规划的 CAS 和 `assets.lock`）
 
+> **M2 实施时的调整**：library 改为**按 bundle 名建目录，再按 container 相对路径放文件**，即 `library/<bundleName>/<相对 container 根目录的路径>`，格式为 `ripper-unpack` v1，见 `ripper-format::unpack`。
+> 原因：container 保留了原始文件名，这样 `model3.json` 里的相对引用（moc3、贴图、physics）直接就能解析；剧本落在 `library/scenario/unitstory/<章节>/<ScenarioId>.json`，与 sse 仓库现有的布局一致。
+> 模型包自带的 clip 就在 `library/live2d/model/<costume>/motions/` 下。所有 moc3 参数和部件 ID 的全集存在 `library/_index/live2d-ids.json`；binding 哈希只由 ID 决定，所以用全集反查和用「同角色并集」反查的结果相同（D12）。
+> 下面是原计划的布局，episode 索引那部分（`episodes/…`）在 M3 仍按原计划实现。
+
 ```
 <out>/
   ripper.lock.json              # app 版本、CDN N、清单 sha256、masterdata commit sha、工具版本、format 版本
@@ -203,7 +208,9 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 
 - **M0 spike（先做，决定 D1 是否成立）**：用 Rust + unity-rs-core 读 5 类黄金 bundle（model、motion、unitstory 剧本、bgm acb、se 大包），逐项对照 Q1、Q8、Q9、Q6。
 - **M1** ✅（2026-09-23）：CDN 客户端、清单与 diff、缓存、`manifest` / `fetch`。
-- **M2**：解包 TextAsset、Texture2D→PNG、MonoBehaviour→JSON、AnimationClip→sse-motion，同时搭好 oracle 框架。
+- **M2** ✅ 核心完成（2026-09-23）：`ripper unpack`，解包 TextAsset、Texture2D→PNG、MonoBehaviour→JSON、AnimationClip→sse-motion。
+  - 增量：记录里 crc 或格式版本变化时重新解包；记录里的未解析 binding 哈希在有新模型后变得可解析时，也会重新解包。
+  - 遗留：D8 可选的 `.astc` 原始数据保留；oracle 对照目前针对 `spike` 输出，还要改成直接对照 library。
 - **M3**：masterdata 源、resolver、`plan` / `rip`、episode 索引、`ripper.lock.json`。
 - **M4**：ACB→WAV、cue 索引、SE 权威索引。
 - **M5**：特效结构导出、USM 解复用、字体参考、`sync` 增量。

@@ -50,6 +50,14 @@ pub struct ObjectInfo {
     pub container: Option<String>,
 }
 
+/// One `AssetBundle.m_Container` entry: the path a `Contains()`/`LoadAsset(path)` hits and its main asset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContainerEntry {
+    /// Lower-cased by Unity at build time, e.g. `assets/.../motions/w-cute-nod05.anim`.
+    pub path: String,
+    pub id: ObjectId,
+}
+
 /// Tightly packed RGBA8 pixels, top row first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RgbaImage {
@@ -75,4 +83,55 @@ pub trait BundleSource: Sized {
 
     /// CRC32 over the decompressed bundle entries in storage order; equals the manifest `crc`.
     fn content_crc32(&self) -> Result<u32>;
+
+    /// The `m_Container` of the bundle's `AssetBundle` object, in stored order. Unlike
+    /// [`ObjectInfo::container`] (which also tags objects in an entry's preload range), each path
+    /// maps to exactly the asset Unity returns for it.
+    fn main_assets(&self) -> Result<Vec<ContainerEntry>> {
+        let objects = self.objects();
+        let Some(bundle) = objects
+            .iter()
+            .find(|o| o.class_id == class_id::ASSET_BUNDLE)
+        else {
+            return Ok(Vec::new());
+        };
+        let tree = self.typetree_json(bundle.id)?;
+        let entries = tree
+            .get("m_Container")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut out = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let path = entry.get("key").and_then(serde_json::Value::as_str);
+            let asset = entry.get("value").and_then(|v| v.get("asset"));
+            let file_id = asset
+                .and_then(|a| a.get("m_FileID"))
+                .and_then(serde_json::Value::as_i64);
+            let path_id = asset
+                .and_then(|a| a.get("m_PathID"))
+                .and_then(serde_json::Value::as_i64);
+            match (path, file_id, path_id) {
+                // m_FileID 0 = the AssetBundle object's own serialized file.
+                (Some(path), Some(0), Some(path_id)) => out.push(ContainerEntry {
+                    path: path.to_owned(),
+                    id: ObjectId {
+                        file_index: bundle.id.file_index,
+                        path_id,
+                    },
+                }),
+                (Some(path), Some(file_id), Some(_)) => {
+                    return Err(UnityError::Reader(format!(
+                        "{path}: asset in external file {file_id} is not supported"
+                    )));
+                }
+                _ => {
+                    return Err(UnityError::Reader(format!(
+                        "malformed m_Container entry {entry}"
+                    )));
+                }
+            }
+        }
+        Ok(out)
+    }
 }

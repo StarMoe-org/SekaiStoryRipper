@@ -10,7 +10,6 @@ pub mod diff;
 pub mod download;
 pub mod manifest;
 pub mod obfuscation;
-pub mod portable;
 pub mod store;
 
 pub use cache::BundleCache;
