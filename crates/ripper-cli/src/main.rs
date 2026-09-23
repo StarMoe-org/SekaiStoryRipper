@@ -2,6 +2,7 @@ mod config;
 mod fetch_cmd;
 mod manifest_cmd;
 mod spike;
+mod unpack_cmd;
 
 use std::path::PathBuf;
 
@@ -22,6 +23,9 @@ struct Cli {
     /// Override paths.cache.
     #[arg(long, global = true)]
     cache: Option<PathBuf>,
+    /// Override paths.out.
+    #[arg(long, global = true)]
+    out: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
 }
@@ -60,6 +64,20 @@ enum Command {
         #[arg(long)]
         no_verify: bool,
     },
+    /// Fetch bundles if needed and unpack them into <out>/library/<bundleName>/ (skips up-to-date ones).
+    Unpack {
+        names: Vec<String>,
+        #[arg(long = "prefix")]
+        prefixes: Vec<String>,
+        #[arg(long)]
+        asset_version: Option<u32>,
+        /// Do not follow manifest `dependencies`.
+        #[arg(long)]
+        no_deps: bool,
+        /// Unpack again even when the library already holds this bundle content.
+        #[arg(long)]
+        force: bool,
+    },
     /// M0 spike: unpack every deobfuscated bundle under CACHE into OUT for oracle comparison.
     Spike {
         /// Directory of plain UnityFS bundles laid out as <cache>/<bundleName>.
@@ -76,6 +94,9 @@ async fn main() -> anyhow::Result<()> {
     let mut config = Config::load(cli.config.as_deref())?;
     if let Some(cache) = cli.cache {
         config.paths.cache = cache;
+    }
+    if let Some(out) = cli.out {
+        config.paths.out = out;
     }
     match cli.command {
         Command::Manifest {
@@ -110,6 +131,25 @@ async fn main() -> anyhow::Result<()> {
                     asset_version,
                     no_deps,
                     no_verify,
+                },
+            )
+            .await
+        }
+        Command::Unpack {
+            names,
+            prefixes,
+            asset_version,
+            no_deps,
+            force,
+        } => {
+            unpack_cmd::run(
+                &config,
+                unpack_cmd::Args {
+                    names,
+                    prefixes,
+                    asset_version,
+                    no_deps,
+                    force,
                 },
             )
             .await

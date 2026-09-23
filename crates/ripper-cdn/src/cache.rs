@@ -9,7 +9,7 @@ use std::io;
 use std::path::PathBuf;
 
 use crate::manifest::BundleEntry;
-use crate::portable;
+use ripper_format::path as portable;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {

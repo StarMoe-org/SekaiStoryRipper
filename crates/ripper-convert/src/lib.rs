@@ -5,6 +5,7 @@ pub mod moc3;
 pub mod motion;
 pub mod movie;
 pub mod texture;
+pub mod unpack;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConvertError {

@@ -1,7 +1,8 @@
-//! Path components that are valid on every supported platform (macOS, Windows, Linux).
+//! Relative paths that are valid on every supported platform (macOS, Windows, Linux).
 //!
-//! Bundle names become directories in the cache, so they are checked rather than silently
-//! rewritten: a name that cannot be stored portably is an error the user should see.
+//! Every path written into an index document is `/`-separated, relative, and passes
+//! [`check_relative`]. Bundle names become cache and library directories, so they are checked
+//! rather than silently rewritten: a name that cannot be stored portably is an error to surface.
 
 const WINDOWS_RESERVED: &[&str] = &[
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",

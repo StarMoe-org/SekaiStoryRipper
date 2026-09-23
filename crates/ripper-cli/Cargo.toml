@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+rayon.workspace = true
 ripper-cdn.workspace = true
 ripper-convert.workspace = true
 ripper-format.workspace = true

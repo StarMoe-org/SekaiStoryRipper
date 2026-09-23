@@ -34,6 +34,10 @@ impl BindingNames {
         }
     }
 
+    pub fn is_known(&self, path_hash: u32) -> bool {
+        self.by_path.contains_key(&path_hash)
+    }
+
     pub fn resolve(&self, path_hash: u32) -> Option<ResolvedBinding> {
         self.by_path.get(&path_hash).cloned()
     }
