@@ -39,6 +39,9 @@ def same(a, b):
     # unity-rs renders map entries as {"key", "value"}; UnityPy as (key, value) tuples.
     if isinstance(a, dict) and a.keys() == {"key", "value"} and isinstance(b, (list, tuple)) and len(b) == 2:
         return same(a["key"], b[0]) and same(a["value"], b[1])
+    # ... and pairs as {"first", "second"}.
+    if isinstance(a, dict) and a.keys() == {"first", "second"} and isinstance(b, (list, tuple)) and len(b) == 2:
+        return same(a["first"], b[0]) and same(a["second"], b[1])
     if isinstance(a, bool) or isinstance(b, bool):
         return bool(a) == bool(b)
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):

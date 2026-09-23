@@ -3,6 +3,7 @@ mod config;
 mod fetch_cmd;
 mod manifest_cmd;
 mod masterdata_cmd;
+mod story_cmd;
 mod unpack_cmd;
 
 use std::path::PathBuf;
@@ -47,6 +48,39 @@ enum Command {
         /// Write the diff against the previous archived version as JSON.
         #[arg(long)]
         diff_out: Option<PathBuf>,
+    },
+    /// Resolve story episodes to the bundles they need (fetches only scenario bundles).
+    Plan {
+        /// e.g. unit:school-refusal-story-chapter/1, event:120/1-4, card:1, special:2, scenario:<id>, all.
+        #[arg(required = true)]
+        selectors: Vec<String>,
+        #[arg(long)]
+        asset_version: Option<u32>,
+        /// Write every plan as JSON.
+        #[arg(long)]
+        report: Option<PathBuf>,
+        /// Fail when any episode has warnings.
+        #[arg(long)]
+        strict: bool,
+    },
+    /// Export episodes completely: fetch + unpack every bundle they need and write episode indexes.
+    Rip {
+        #[arg(required = true)]
+        selectors: Vec<String>,
+        #[arg(long)]
+        asset_version: Option<u32>,
+        /// Write a per-episode summary as JSON.
+        #[arg(long)]
+        report: Option<PathBuf>,
+        /// Fail when any episode has warnings.
+        #[arg(long)]
+        strict: bool,
+        /// Unpack again even when the library already holds the bundle content.
+        #[arg(long)]
+        force: bool,
+        /// Also keep ASTC textures' original blocks as .astc files.
+        #[arg(long)]
+        keep_astc: bool,
     },
     /// Fetch the masterdata tables the resolver needs (from masterdata.url_template) into the cache.
     Masterdata {
@@ -136,6 +170,40 @@ async fn main() -> anyhow::Result<()> {
                 },
             )
             .await
+        }
+        Command::Plan {
+            selectors,
+            asset_version,
+            report,
+            strict,
+        } => {
+            let args = story_cmd::Args {
+                selectors,
+                asset_version,
+                report,
+                strict,
+                force: false,
+                keep_astc: false,
+            };
+            story_cmd::run_plan(&config, args).await
+        }
+        Command::Rip {
+            selectors,
+            asset_version,
+            report,
+            strict,
+            force,
+            keep_astc,
+        } => {
+            let args = story_cmd::Args {
+                selectors,
+                asset_version,
+                report,
+                strict,
+                force,
+                keep_astc,
+            };
+            story_cmd::run_rip(&config, args).await
         }
         Command::Masterdata { refresh } => masterdata_cmd::run(&config, refresh).await,
         Command::Unpack {

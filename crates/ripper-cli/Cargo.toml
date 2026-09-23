@@ -19,6 +19,7 @@ rayon.workspace = true
 ripper-cdn.workspace = true
 ripper-convert.workspace = true
 ripper-format.workspace = true
+ripper-resolve.workspace = true
 ripper-unity.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -95,6 +95,36 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
         config.cdn.platform,
         entries.len()
     );
+    let summary = unpack_entries(config, entries, args.force, args.keep_astc, true).await?;
+    println!(
+        "{} unpacked, {} up to date, {} failed -> {}",
+        summary.unpacked,
+        summary.up_to_date,
+        summary.failed.len(),
+        config.paths.out.join("library").display()
+    );
+    if !summary.failed.is_empty() {
+        bail!("{} bundle(s) failed to unpack", summary.failed.len());
+    }
+    Ok(())
+}
+
+#[derive(Debug, Default)]
+pub struct UnpackSummary {
+    pub unpacked: usize,
+    pub up_to_date: usize,
+    /// `(bundle, reason)`.
+    pub failed: Vec<(String, String)>,
+}
+
+/// Fetches what is missing and unpacks `entries` into `<out>/library` (models first, in parallel).
+pub async fn unpack_entries(
+    config: &Config,
+    entries: Vec<BundleEntry>,
+    force: bool,
+    keep_astc: bool,
+    verbose: bool,
+) -> Result<UnpackSummary> {
     ensure_cached(config, entries.clone(), true).await?;
 
     let library = config.paths.out.join("library");
@@ -126,11 +156,7 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
             config.tools.ffmpeg.display()
         );
     }
-    let options = UnpackOptions {
-        ffmpeg,
-        keep_astc: args.keep_astc,
-    };
-    let force = args.force;
+    let options = UnpackOptions { ffmpeg, keep_astc };
     let outcomes: Vec<(String, Outcome)> = tokio::task::spawn_blocking(move || {
         entries
             .par_iter()
@@ -162,36 +188,29 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
     })
     .await?;
 
-    let (mut unpacked, mut current, mut failed) = (0, 0, 0);
-    for (name, outcome) in &outcomes {
+    let mut summary = UnpackSummary::default();
+    for (name, outcome) in outcomes {
         match outcome {
-            Outcome::UpToDate => current += 1,
+            Outcome::UpToDate => summary.up_to_date += 1,
             Outcome::Unpacked { files, skipped } => {
-                unpacked += 1;
-                eprintln!(
-                    "{name}: {files} files{}",
-                    if skipped.is_empty() {
+                summary.unpacked += 1;
+                if verbose {
+                    let note = if skipped.is_empty() {
                         String::new()
                     } else {
                         format!(", {} skipped", skipped.len())
+                    };
+                    eprintln!("{name}: {files} files{note}");
+                    for reason in skipped.iter().take(5) {
+                        eprintln!("    skipped {reason}");
                     }
-                );
-                for reason in skipped.iter().take(5) {
-                    eprintln!("    skipped {reason}");
                 }
             }
             Outcome::Failed(reason) => {
-                failed += 1;
                 eprintln!("{name}: FAILED: {reason}");
+                summary.failed.push((name, reason));
             }
         }
     }
-    println!(
-        "{unpacked} unpacked, {current} up to date, {failed} failed -> {}",
-        config.paths.out.join("library").display()
-    );
-    if failed > 0 {
-        bail!("{failed} bundle(s) failed to unpack");
-    }
-    Ok(())
+    Ok(summary)
 }

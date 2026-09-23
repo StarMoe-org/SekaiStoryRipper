@@ -35,7 +35,6 @@ pub fn dir(config: &Config) -> PathBuf {
 }
 
 /// Reads a cached table, fetching it first if it is missing.
-#[expect(dead_code, reason = "used by `plan`/`rip` once the M3 resolver lands")]
 pub async fn table(config: &Config, name: &str) -> Result<serde_json::Value> {
     let path = dir(config).join(format!("{name}.json"));
     if !path.exists() {

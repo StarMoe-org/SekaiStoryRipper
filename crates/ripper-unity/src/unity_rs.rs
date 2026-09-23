@@ -63,11 +63,21 @@ impl BundleSource for UnityRsBundle {
     }
 
     fn typetree_json(&self, id: ObjectId) -> Result<serde_json::Value> {
-        let bytes = self
-            .object(id)?
+        let object = self.object(id)?;
+        let bytes = object
             .read_type_tree_json(false, MAX_OBJECT_BYTES)
             .map_err(|error| reader_error(&self.name, error))?;
-        serde_json::from_slice(&bytes).map_err(|error| UnityError::Json(id, error))
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|error| UnityError::Json(id, error))?;
+        if contains_typeless(&value) {
+            // unity-rs renders TypelessData (vertex/index blobs) as `{Offset, Size}` into the
+            // object's serialized bytes; inline the bytes so the JSON is self-contained.
+            let raw = object
+                .read_raw(MAX_OBJECT_BYTES as u64)
+                .map_err(|error| reader_error(&self.name, error))?;
+            inline_typeless(&mut value, &raw).map_err(|detail| reader_error(&self.name, detail))?;
+        }
+        Ok(value)
     }
 
     fn texture_rgba(&self, id: ObjectId) -> Result<RgbaImage> {
@@ -168,4 +178,67 @@ fn content_crc32_region(name: &str, region: &Region) -> Result<u32> {
             .map_err(|error| reader_error(name, error))?;
     }
     Ok(crc.0.finalize())
+}
+
+fn typeless_span(value: &serde_json::Value) -> Option<(usize, usize)> {
+    let object = value.as_object()?;
+    if object.len() != 2 {
+        return None;
+    }
+    let offset = object.get("Offset")?.as_u64()?;
+    let size = object.get("Size")?.as_u64()?;
+    Some((offset as usize, size as usize))
+}
+
+fn contains_typeless(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(map) => {
+            typeless_span(value).is_some() || map.values().any(contains_typeless)
+        }
+        serde_json::Value::Array(items) => items.iter().any(contains_typeless),
+        _ => false,
+    }
+}
+
+/// Replaces every `{Offset, Size}` TypelessData node with the byte array it points at.
+fn inline_typeless(value: &mut serde_json::Value, raw: &[u8]) -> std::result::Result<(), String> {
+    if let Some((offset, size)) = typeless_span(value) {
+        let bytes = raw.get(offset..offset + size).ok_or_else(|| {
+            format!(
+                "TypelessData {offset}+{size} outside the {}-byte object",
+                raw.len()
+            )
+        })?;
+        *value =
+            serde_json::Value::Array(bytes.iter().map(|&b| serde_json::Value::from(b)).collect());
+        return Ok(());
+    }
+    match value {
+        serde_json::Value::Object(map) => {
+            map.values_mut().try_for_each(|v| inline_typeless(v, raw))
+        }
+        serde_json::Value::Array(items) => {
+            items.iter_mut().try_for_each(|v| inline_typeless(v, raw))
+        }
+        _ => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typeless_nodes_are_replaced_by_their_bytes() {
+        let mut value = serde_json::json!({"m_VertexData": {"m_DataSize": {"Offset": 2, "Size": 3}}, "keep": {"Offset": 1}});
+        assert!(contains_typeless(&value));
+        inline_typeless(&mut value, &[9, 9, 1, 2, 3, 9]).unwrap();
+        assert_eq!(
+            value["m_VertexData"]["m_DataSize"],
+            serde_json::json!([1, 2, 3])
+        );
+        assert_eq!(value["keep"], serde_json::json!({"Offset": 1}));
+        let mut bad = serde_json::json!({"Offset": 5, "Size": 5});
+        assert!(inline_typeless(&mut bad, &[0; 4]).is_err());
+    }
 }
