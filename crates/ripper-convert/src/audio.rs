@@ -1,107 +1,167 @@
-//! CRI ACB → per-cue WAV plus metadata (decision D9: WAV + cue metadata + the original ACB).
+//! CRI ACB → one WAV per physical waveform + `ripper-acb` index + all UTF tables (decision D9).
 
+use std::collections::BTreeMap;
 use std::io::Cursor;
 
-use cridecoder::acb::{UtfTable, Value as UtfValue};
-use cridecoder::{HcaDecoder, HcaInfo, extract_acb_to_memory};
-use serde::Serialize;
+use cridecoder::HcaDecoder;
+use cridecoder::acb::{AfsArchive, TrackList, UtfTable, Value as UtfValue};
+use ripper_format::audio::{self, AcbIndex, Cue, HcaInfo, Waveform};
 use serde_json::{Map, Value, json};
 
 use crate::{ConvertError, Result};
-
-/// HCA stream parameters, including the loop region CRI stores in the header.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HcaMeta {
-    pub version: u32,
-    pub sampling_rate: u32,
-    pub channel_count: u32,
-    pub block_count: u32,
-    pub samples_per_block: usize,
-    pub encoder_delay: u32,
-    pub encoder_padding: u32,
-    pub loop_enabled: bool,
-    pub loop_start_block: u32,
-    pub loop_end_block: u32,
-    pub loop_start_delay: u32,
-    pub loop_end_padding: u32,
-}
-
-impl From<&HcaInfo> for HcaMeta {
-    fn from(info: &HcaInfo) -> Self {
-        Self {
-            version: info.version,
-            sampling_rate: info.sampling_rate,
-            channel_count: info.channel_count,
-            block_count: info.block_count,
-            samples_per_block: info.samples_per_block,
-            encoder_delay: info.encoder_delay,
-            encoder_padding: info.encoder_padding,
-            loop_enabled: info.loop_enabled,
-            loop_start_block: info.loop_start_block,
-            loop_end_block: info.loop_end_block,
-            loop_start_delay: info.loop_start_delay,
-            loop_end_padding: info.loop_end_padding,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct DecodedCue {
-    pub name: String,
-    pub cue_id: i32,
-    /// `None` when the waveform is not HCA; `wav` then holds the raw waveform bytes.
-    pub hca: Option<HcaMeta>,
-    /// PCM16 WAV (with a `smpl` loop chunk when the HCA loops).
-    pub wav: Vec<u8>,
-    pub extension: String,
-    /// The HCA stream as stored in the AWB, for archival or reference decoding.
-    pub hca_bytes: Option<Vec<u8>>,
-}
 
 fn cri(error: impl std::fmt::Display) -> ConvertError {
     ConvertError::Cri(error.to_string())
 }
 
-/// Lists the cues of an ACB (with embedded AWB) and decodes each HCA waveform to WAV.
-pub fn decode_acb(acb: &[u8]) -> Result<Vec<DecodedCue>> {
-    let tracks = extract_acb_to_memory(Cursor::new(acb), None).map_err(cri)?;
-    tracks
-        .into_iter()
-        .map(|track| {
-            if track.extension != "hca" {
-                return Ok(DecodedCue {
-                    name: track.name,
-                    cue_id: track.cue_id,
-                    hca: None,
-                    wav: track.data,
-                    extension: track.extension,
-                    hca_bytes: None,
-                });
-            }
-            let mut decoder =
-                HcaDecoder::from_reader(Cursor::new(track.data.clone())).map_err(cri)?;
-            if decoder.info().encryption_enabled {
-                return Err(ConvertError::Unsupported("encrypted HCA", track.name));
-            }
-            let meta = HcaMeta::from(decoder.info());
-            let mut wav = Vec::new();
-            decoder.decode_to_wav(&mut wav).map_err(cri)?;
-            Ok(DecodedCue {
-                name: track.name,
-                cue_id: track.cue_id,
-                hca: Some(meta),
-                wav,
-                extension: "wav".into(),
-                hca_bytes: Some(track.data),
-            })
-        })
-        .collect()
+/// Everything derived from one ACB.
+pub struct AcbExport {
+    pub index: AcbIndex,
+    /// `(path relative to the ACB's directory, bytes)` for each waveform.
+    pub files: Vec<(String, Vec<u8>)>,
+    /// All `@UTF` tables as JSON.
+    pub tables: Value,
 }
 
-/// Dumps every `@UTF` table of an ACB (Cue, CueName, Block, Aisac, ... tables) as JSON, so block and
-/// AISAC data survive even though the WAV export cannot express them. Non-table blobs are summarised
-/// by size only; waveform data is not copied.
+fn hca_info(info: &cridecoder::HcaInfo) -> HcaInfo {
+    HcaInfo {
+        version: info.version,
+        sampling_rate: info.sampling_rate,
+        channel_count: info.channel_count,
+        block_count: info.block_count,
+        samples_per_block: info.samples_per_block as u32,
+        encoder_delay: info.encoder_delay,
+        encoder_padding: info.encoder_padding,
+        loop_enabled: info.loop_enabled,
+        loop_start_block: info.loop_start_block,
+        loop_end_block: info.loop_end_block,
+        loop_start_delay: info.loop_start_delay,
+        loop_end_padding: info.loop_end_padding,
+    }
+}
+
+/// Decodes an HCA stream to PCM16 WAV (with a `smpl` loop chunk when it loops).
+pub fn hca_to_wav(hca: Vec<u8>) -> Result<(Vec<u8>, HcaInfo)> {
+    let mut decoder = HcaDecoder::from_reader(Cursor::new(hca)).map_err(cri)?;
+    if decoder.info().encryption_enabled {
+        return Err(ConvertError::Unsupported("encrypted HCA", String::new()));
+    }
+    let info = hca_info(decoder.info());
+    let mut wav = Vec::new();
+    decoder.decode_to_wav(&mut wav).map_err(cri)?;
+    Ok((wav, info))
+}
+
+/// `acb_file` is the ACB's file name (e.g. `se_pack00001_b.acb`); waveforms go to `<stem>.audio/`.
+pub fn export_acb(acb_file: &str, acb: &[u8]) -> Result<AcbExport> {
+    let stem = acb_file.strip_suffix(".acb").unwrap_or(acb_file);
+    let mut utf = UtfTable::new(Cursor::new(acb)).map_err(cri)?;
+    let tracks = TrackList::new(&utf).map_err(cri)?.tracks;
+    // Track names from TrackList are per track (`bgm90001-12`); the game plays cues by the
+    // CueNameTable name, so group tracks by cue id and name each cue from that table.
+    let cue_names: BTreeMap<i64, String> =
+        match utf.rows.first().and_then(|row| row.get("CueNameTable")) {
+            Some(UtfValue::Data(bytes)) if bytes.starts_with(b"@UTF") => {
+                UtfTable::new(Cursor::new(bytes))
+                    .map_err(cri)?
+                    .rows
+                    .iter()
+                    .filter_map(|row| {
+                        Some((
+                            row.get("CueIndex")?.as_int()?,
+                            row.get("CueName")?.as_string()?.to_owned(),
+                        ))
+                    })
+                    .collect()
+            }
+            _ => BTreeMap::new(),
+        };
+    let mut embedded = match utf.rows.first_mut().and_then(|row| row.remove("AwbFile")) {
+        Some(UtfValue::Data(bytes)) if !bytes.is_empty() => {
+            Some(AfsArchive::new(Cursor::new(bytes)).map_err(cri)?)
+        }
+        _ => None,
+    };
+
+    let mut index = AcbIndex {
+        format: audio::FORMAT.into(),
+        version: audio::VERSION,
+        acb: acb_file.into(),
+        cues: Vec::new(),
+        waveforms: BTreeMap::new(),
+        warnings: Vec::new(),
+    };
+    let mut files = Vec::new();
+    let mut cue_position: BTreeMap<i32, usize> = BTreeMap::new();
+    for track in &tracks {
+        let key = if track.is_stream {
+            format!("s{}_{}", track.stream_awb_id, track.wav_id)
+        } else {
+            format!("e{}", track.wav_id)
+        };
+        let position = *cue_position.entry(track.cue_id).or_insert_with(|| {
+            let name = cue_names
+                .get(&i64::from(track.cue_id))
+                .cloned()
+                .unwrap_or_else(|| track.name.clone());
+            index.cues.push(Cue {
+                name,
+                cue_id: track.cue_id,
+                waveforms: Vec::new(),
+            });
+            index.cues.len() - 1
+        });
+        index.cues[position].waveforms.push(key.clone());
+        if index.waveforms.contains_key(&key) {
+            continue;
+        }
+        if track.is_stream {
+            // Streaming AWBs are separate files; the story ACBs seen so far embed everything.
+            index.warnings.push(format!(
+                "{}: waveform {key} is in a streaming AWB that is not available",
+                track.name
+            ));
+            continue;
+        }
+        let Some(awb) = embedded.as_mut() else {
+            index
+                .warnings
+                .push(format!("{}: ACB has no embedded AWB", track.name));
+            continue;
+        };
+        let data = awb.file_data_for_cue_id(track.wav_id).map_err(cri)?;
+        let encoding = cridecoder::acb::wave_type_extension(track.enc_type)
+            .trim_start_matches('.')
+            .to_owned();
+        let (file, bytes, hca) = if encoding == "hca" {
+            let (wav, info) = hca_to_wav(data)?;
+            (format!("{stem}.audio/{key}.wav"), wav, Some(info))
+        } else {
+            let extension = if encoding.is_empty() {
+                track.enc_type.to_string()
+            } else {
+                encoding.clone()
+            };
+            (format!("{stem}.audio/{key}.{extension}"), data, None)
+        };
+        files.push((file.clone(), bytes));
+        index.waveforms.insert(
+            key,
+            Waveform {
+                file,
+                encoding,
+                hca,
+            },
+        );
+    }
+    Ok(AcbExport {
+        index,
+        files,
+        tables: acb_tables(acb)?,
+    })
+}
+
+/// Dumps every `@UTF` table of an ACB as JSON. Non-table blobs (the AWB) are summarised by size.
 pub fn acb_tables(acb: &[u8]) -> Result<Value> {
     table_json(acb)
 }

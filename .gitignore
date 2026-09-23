@@ -31,3 +31,6 @@ global-metadata.dat
 tools/oracle/.venv/
 tools/oracle/**/work/
 __pycache__/
+
+# Claude Code local state (agent worktrees)
+/.claude/

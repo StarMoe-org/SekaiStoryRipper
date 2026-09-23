@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 use ripper_cdn::{BundleCache, BundleEntry};
 use ripper_convert::motion::BindingNames;
-use ripper_convert::unpack::{is_up_to_date, moc3_ids, unpack_bundle};
+use ripper_convert::unpack::{UnpackOptions, is_up_to_date, moc3_ids, unpack_bundle};
 use ripper_unity::{BundleSource, UnityRsBundle};
 use serde::{Deserialize, Serialize};
 
@@ -114,6 +114,18 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
     known.save(&library)?;
     let names = known.names();
 
+    let ffmpeg = ripper_convert::movie::find_ffmpeg(&config.tools.ffmpeg);
+    if ffmpeg.is_none()
+        && entries
+            .iter()
+            .any(|e| e.bundle_name.starts_with("scenario/movie/"))
+    {
+        eprintln!(
+            "warning: ffmpeg ({}) not found; movie ADX audio is kept without WAV",
+            config.tools.ffmpeg.display()
+        );
+    }
+    let options = UnpackOptions { ffmpeg };
     let force = args.force;
     let outcomes: Vec<(String, Outcome)> = tokio::task::spawn_blocking(move || {
         entries
@@ -130,6 +142,7 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
                         entry.crc,
                         &names,
                         &dir,
+                        &options,
                     )?)
                 });
                 let outcome = match result {

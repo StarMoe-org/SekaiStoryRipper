@@ -97,6 +97,25 @@ impl BundleSource for UnityRsBundle {
     fn content_crc32(&self) -> Result<u32> {
         content_crc32_region(&self.name, &self.region)
     }
+
+    fn font_file(&self, id: ObjectId) -> Result<(Vec<u8>, String)> {
+        let limits = unity_rs_core::simple_assets::SimpleAssetReadLimits {
+            maximum_payload_bytes: MAX_OBJECT_BYTES as u64,
+            ..Default::default()
+        };
+        let font = self
+            .object(id)?
+            .read_font(limits)
+            .map_err(|error| reader_error(&self.name, error))?;
+        let bytes = font
+            .payload
+            .read_to_vec(MAX_OBJECT_BYTES as u64)
+            .map_err(|error| reader_error(&self.name, error))?;
+        Ok((
+            bytes,
+            font.suggested_extension.trim_start_matches('.').to_owned(),
+        ))
+    }
 }
 
 /// CRC32 over the decompressed entries of a UnityFS bundle in storage order, which is what the

@@ -1,7 +1,6 @@
 mod config;
 mod fetch_cmd;
 mod manifest_cmd;
-mod spike;
 mod unpack_cmd;
 
 use std::path::PathBuf;
@@ -78,14 +77,6 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// M0 spike: unpack every deobfuscated bundle under CACHE into OUT for oracle comparison.
-    Spike {
-        /// Directory of plain UnityFS bundles laid out as <cache>/<bundleName>.
-        cache: PathBuf,
-        out: PathBuf,
-        #[arg(long, default_value = ripper_unity::DEFAULT_UNITY_VERSION)]
-        unity_version: String,
-    },
 }
 
 #[tokio::main]
@@ -154,10 +145,5 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
-        Command::Spike {
-            cache,
-            out,
-            unity_version,
-        } => tokio::task::spawn_blocking(move || spike::run(&cache, &out, &unity_version)).await?,
     }
 }
