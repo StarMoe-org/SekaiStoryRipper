@@ -4,9 +4,11 @@
 //! version it does not know instead of guessing.
 
 pub mod audio;
+pub mod episode;
 pub mod motion;
 pub mod path;
 pub mod unpack;
 
+pub use episode::EpisodeIndex;
 pub use motion::SseMotion;
 pub use unpack::UnpackRecord;
