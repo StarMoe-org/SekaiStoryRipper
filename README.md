@@ -3,13 +3,17 @@
 为 **Project Sekai（CN 服 6.4.0，Unity 2022.3.62f3，iOS）** 的剧情回放抓取并解包所需资产的独立工具。
 下游消费者是 [SekaiStoryExporter](https://github.com/StarMoe-org/SekaiStoryExporter)（sse）。
 
-> 状态：**规划完成，尚未开始实现**。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
+> 状态：**M0 完成**（workspace 骨架 + 技术栈 spike，结论 GO，见 [`docs/spike/M0-report.md`](docs/spike/M0-report.md)）。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
 
 ## 做什么
 
 1. 从 CN CDN 匿名拉取 AssetBundle，完成反混淆、校验和缓存；
 2. 根据 masterdata 和剧本，反推出某一话需要哪些 bundle；
 3. 把 bundle 解成 sse 可以直接消费的**无损、版本化**中间格式。动作（AnimationClip）保留 StreamedClip 的原始多项式系数，**不转成 motion3**。
+
+## 支持平台
+
+macOS arm64、Windows x64、Linux x64、Linux arm64（Linux 为 musl 静态链接）。每个平台都在原生 CI runner 上构建和测试（`.gitea/workflows/ci.yml`）。
 
 ## 计划中的结构
 

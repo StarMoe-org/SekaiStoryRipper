@@ -1,0 +1,18 @@
+[package]
+name = "ripper-resolve"
+description = "Works out which bundles a story episode needs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+serde.workspace = true
+serde_yaml_ng.workspace = true
+
+[lints]
+workspace = true

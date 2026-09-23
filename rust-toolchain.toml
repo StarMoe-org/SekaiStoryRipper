@@ -1,0 +1,11 @@
+# 与 SekaiStoryExporter 保持同一工具链，避免两边浮点/优化行为不一致。
+# 支持平台：macOS arm64、Windows x64、Linux x64/arm64（musl 静态链接）。
+[toolchain]
+channel    = "1.98.1"
+components = ["rustfmt", "clippy"]
+targets    = [
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+]
