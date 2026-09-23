@@ -28,7 +28,19 @@ ripper unpack live2d/model/01ichika_normal live2d/motion/01ichika_motion_base   
 ripper unpack --prefix scenario/unitstory/ --force                             # 忽略已有结果，重新解包
 ```
 
-解包布局：`out/library/<bundleName>/<container 相对路径>`。TextAsset 原样输出（去掉 `.bytes`），Texture2D 输出 PNG，AnimationClip 输出 `.sse-motion.json`，其他对象输出 typetree JSON。每个 bundle 目录里的 `_ripper.json` 记录了文件清单和来源 crc。
+解包布局：`out/library/<bundleName>/<container 相对路径>`。
+
+| 类别 | 输出 |
+|---|---|
+| TextAsset | 原样输出，去掉 `.bytes` |
+| Texture2D | PNG（Alpha8 贴图，如字体 atlas，写成白色 + alpha） |
+| AnimationClip | `.sse-motion.json` |
+| ACB | 原始 `.acb`、`.cues.json`、`.tables.json`，以及 `.audio/` 下每个 waveform 一个 WAV |
+| 影片 | `.m2v` 和 `.adx`，另有经 ffmpeg 转出的 `.wav` |
+| Font | `.otf` / `.ttf` |
+| 其他对象 | typetree JSON（带 GameObject 的 bundle 还会有 `_objects.json`） |
+
+每个 bundle 目录里的 `_ripper.json` 记录了文件清单和来源 crc。
 
 缓存布局：清单在 `cache/manifests/<app>/ios<N>.msgpack.zst`，bundle 在 `cache/bundles/<bundleName>.<crc>`（已反混淆的 UnityFS）。
 每个 bundle 下载后都会校验长度（等于 `fileSize + 4`）和 CRC（对解压后的条目计算，与清单比对），通过后才原子写入缓存。

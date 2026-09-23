@@ -1,6 +1,7 @@
 mod config;
 mod fetch_cmd;
 mod manifest_cmd;
+mod masterdata_cmd;
 mod unpack_cmd;
 
 use std::path::PathBuf;
@@ -45,6 +46,12 @@ enum Command {
         /// Write the diff against the previous archived version as JSON.
         #[arg(long)]
         diff_out: Option<PathBuf>,
+    },
+    /// Fetch the masterdata tables the resolver needs (from masterdata.url_template) into the cache.
+    Masterdata {
+        /// Re-download tables that are already cached.
+        #[arg(long)]
+        refresh: bool,
     },
     /// Download bundles into the cache (with their manifest dependencies), verifying length and CRC.
     Fetch {
@@ -126,6 +133,7 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        Command::Masterdata { refresh } => masterdata_cmd::run(&config, refresh).await,
         Command::Unpack {
             names,
             prefixes,

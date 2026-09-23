@@ -212,8 +212,13 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
   - 增量：记录里 crc 或格式版本变化时重新解包；记录里的未解析 binding 哈希在有新模型后变得可解析时，也会重新解包。
   - 遗留：D8 可选的 `.astc` 原始数据保留；oracle 对照目前针对 `spike` 输出，还要改成直接对照 library。
 - **M3**：masterdata 源、resolver、`plan` / `rip`、episode 索引、`ripper.lock.json`。
-- **M4**：ACB→WAV、cue 索引、SE 权威索引。
-- **M5**：特效结构导出、USM 解复用、字体参考、`sync` 增量。
+- **M4** ✅ 解包部分完成（2026-09-23）：ACB 每个物理 waveform 输出一个 WAV，`<x>.cues.json`（`ripper-acb` v1，cue 名取自 CueNameTable，按 track 顺序引用 waveform），`<x>.tables.json`（全部 UTF 表），并保留原始 ACB。实测分块 BGM `bgm90001` 为 1 个 cue、262 次 track 引用、185 个 waveform。SE 权威索引在 M3 的解析器里实现。HCA 的极性和 v3 验证仍待 vgmstream（S6）。
+- **M5** ✅ 解包部分完成（2026-09-23）：
+  - 影片按 MovieBundleBuildData 拼接分片后解复用（`.m2v` + `.adx`），ADX 经 ffmpeg 转成 `.wav`；
+  - 带 GameObject 的 bundle 额外输出 `_objects.json`，即整个对象图，用于特效 prefab；
+  - Font 对象导出原始 `.otf`/`.ttf`；
+  - 同一 container 路径下的多个对象（TMP FontAsset、atlas、材质）以 `<stem>.<名字>.<pathId>` 命名。
+  `sync` 增量归入 M3 的 `rip`。
 - **M6**：全量回归（2650 个剧本）、`ripper-format` crate 发布给 sse。
 
 ---
