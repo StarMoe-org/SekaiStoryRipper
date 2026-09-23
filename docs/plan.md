@@ -174,6 +174,15 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 
 ---
 
+### 跨平台约束（第四批决策）
+
+- **只用纯 Rust 或能在四个平台原生编译的依赖。** 目前唯一的 C 依赖是 `zstd-sys`（经 unity-rs-core 引入）。HTTP 用 reqwest + **rustls**，不引入 OpenSSL。
+- **输出文件名要在 Windows 上合法**：替换 `<>:"/\|?*` 和控制字符；避开 `CON`、`PRN`、`AUX`、`NUL`、`COM1`–`COM9`、`LPT1`–`LPT9` 这些保留名；去掉结尾的点和空格。
+- **大小写不敏感的文件系统**（Windows NTFS、macOS APFS 默认）：同一目录下只差大小写的文件名视为冲突，写出前检测，报错并在名字后加稳定后缀，不能静默覆盖。
+- **长路径**：Rust std 在 Windows 上会自动加 `\\?\` 前缀，所以不需要额外处理。但索引 JSON 里的路径一律用 `/` 分隔的相对路径，不写平台路径。
+- **外部程序**（ffmpeg）按平台查找可执行文件名，路径可配置；只用于 M5 的 ADX 转码。
+- 不依赖符号链接、硬链接或文件权限位；缓存目录可以放在任何文件系统上。
+
 ## 5. 测试与验证
 
 1. **Oracle 对比**（`tools/oracle/`，用 uv 跑 Python + UnityPy，复用你之前的 cdn.py 和 clip.py 的逻辑）：
@@ -216,6 +225,15 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 - **逆向结论进代码**：手写常量，并由单元测试对照 `live2d-bundle-resolution.yaml`（`ripper-resolve::live2d`）。
 
 **M0 结论（2026-09-23）**：GO，保持 D1。详见 [`spike/M0-report.md`](spike/M0-report.md)。
+
+**第四批已拍板（M0 之后，2026-09-23）**：
+- **S6（HCA PCM 极性 / v3）**：暂不处理，放到 M4 再验证；在此之前 WAV 按 cridecoder 的原始输出写出。
+- **影片音频（ADX）**：M5 **调用外部 ffmpeg** 转成 WAV，ffmpeg 路径可在配置里指定（默认从 PATH 找 `ffmpeg` / `ffmpeg.exe`）。找不到 ffmpeg 时，默认给 warning 并保留原始 `.adx`，`--strict` 时报错（与 D14 一致）。
+- **分块 BGM**：M4 **按 waveform（AWB id）导出** WAV；`cues.json` 给出 cue → waveform，`tables.json` 给出 block → track → waveform。普通的单 cue BGM 结果不变。
+- **跨平台（新增硬性要求）**：支持 **macOS arm64、Windows x64、Linux x64、Linux arm64**。
+  - 构建：各平台用**原生 CI runner**（Gitea Actions，`.gitea/workflows/ci.yml`，runner 标签 `macos-arm64` / `windows-x64` / `linux-x64` / `linux-arm64`），每个平台都跑 fmt、clippy、test、release build。
+  - Linux 用 **musl 静态链接**（`x86_64/aarch64-unknown-linux-musl`）。unity-rs-core 硬依赖 `zstd-sys`（C 代码），所以 Linux runner 要装 `musl-tools`；从 macOS 交叉编译 Windows 时会因为缺 Windows SDK 头文件而失败（M0 实测），这也是选原生 runner 的原因。
+  - 代码约束见 §4「跨平台约束」。
 
 **D10 新证据**（逆向前的途径 A 数据，保留备查）：BuildModelData 字段只有 Moc3FileName/TextureNames/PhysicsFileName/UserDataFileName/AdditionalMotionData/CategoryRules，**没有动作包引用**（Q2 = 否）；MonoBehaviour 的 typetree 可以直接读（Q1 倾向为「内嵌」）。规则 R1（character2ds.assetName+`_motion_base`）命中 357/371，另有 200 条没有 assetName；规则 R2（CostumeType 最长前缀匹配）命中 637/648，0 歧义；第 1 章 21 个组合两条规则全部一致。
 
@@ -388,7 +406,7 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 - **Q3** CN 卡面剧情的剧本 bundle 路径是什么：`character/member_scenario/<ab>` 还是 `character/member/<ab>`？清单里 `character/member` 有 1352 个。 → ✅ 已答（RE-R01）：`character/member/<cards[cardId].assetbundleName>`。
 - **Q4** `vs<ScenarioId>` 语音包和 `part_voice*` 的规则是什么？sekai-viewer 里的 ScenarioId→bundle 修正（活动 167–176 加 1 等）在 CN 上是否成立？
 - **Q5** `IncludeSoundDataBundleNames`（例如 `scenario/effect/hologram`）里是不是带 ACB？ → ✅ 已答（M0）：`hologram` 里没有 ACB；`IncludeSoundDataBundleNames` 的含义仍待确认。
-- **Q6** cridecoder 能否读出 ACB 的 block、AISAC、循环点？它对 HCA v3 + HFR 的解码是否正确（对照 vgmstream 或 hca.py）？ → ⚠️ 部分已答（M0）：block/AISAC 表完整导出，HCA 循环点能读到；分块 BGM 必须按 waveform 导出；PCM 极性和 v3 正确性待 vgmstream 裁定。
+- **Q6** cridecoder 能否读出 ACB 的 block、AISAC、循环点？它对 HCA v3 + HFR 的解码是否正确（对照 vgmstream 或 hca.py）？ → ⚠️ 部分已答（M0）：block/AISAC 表完整导出，HCA 循环点能读到；分块 BGM 必须按 waveform 导出；PCM 极性和 v3 正确性待 vgmstream 裁定（第四批决策：推迟到 M4）。
 - **Q7** scenario/movie 里 USM 的视频编码是什么（VP9、H.264 还是 MPEG-1），有几条音轨？ → ✅ 已答（M0）：按 MovieBundleBuildData 拆片；视频 MPEG-1，音频 CRI ADX。
 - **Q8** unity-rs-core 实测：显式版本覆盖能否处理抹成 `5.x.x` 的头；能否拿到 AnimationClip 完整的 `m_MuscleClip`、`m_ClipBindingConstant`、`m_Events` 原始字段；ASTC 解码是否和 astcenc 一致。 → ✅ 已答（M0 S1/S4/S5）：全部可以。
 - **Q9** StreamedClip 末尾是否有 +FLT_MAX 哨兵帧；2022.3.62 下 curveCount 是 u16 还是 u32（AssetStudio 按 2022.3.19 以上 u16 处理）。 → ✅ 已答（M0）：末尾有 +∞ 哨兵帧；curveCount 和 discreteCurveCount 是两个独立字段。
@@ -397,6 +415,7 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 - **Q12** haruki masterdata 相对 CDN 的更新延迟；卡面剧情要用的 `cards.assetbundleName` 在不在里面。
 - **Q13** 清单里的 `crc` 是哪种算法、针对什么内容（混淆前还是混淆后），能否用来做完整性校验。 → ✅ 已答（M0 S8）：按顺序拼接全部解压后的条目，再算 CRC32。
 - **Q14** CN 客户端的服务条款对个人解包和复刻的约束（这是法律问题，由你判断）。
+- **Q16** Gitea 上需要注册 4 个平台的 Gitea Actions runner（标签见第四批决策）。目前仓库和用户级 runner 都是 0 个。
 - **Q15** 特效 prefab 在 sse 里打算怎么用（烘焙序列帧还是实时粒子），这决定 ripper 要导出多少对象图细节。
 
 ---

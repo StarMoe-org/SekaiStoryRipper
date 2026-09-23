@@ -11,6 +11,10 @@
 2. 根据 masterdata 和剧本，反推出某一话需要哪些 bundle；
 3. 把 bundle 解成 sse 可以直接消费的**无损、版本化**中间格式。动作（AnimationClip）保留 StreamedClip 的原始多项式系数，**不转成 motion3**。
 
+## 支持平台
+
+macOS arm64、Windows x64、Linux x64、Linux arm64（Linux 为 musl 静态链接）。每个平台都在原生 CI runner 上构建和测试（`.gitea/workflows/ci.yml`）。
+
 ## 计划中的结构
 
 Rust（edition 2024）多 crate workspace：

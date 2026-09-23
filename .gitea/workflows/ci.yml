@@ -1,0 +1,43 @@
+# Native build + lint + test on every supported platform (decision: native runners, musl on Linux).
+# Runners must be registered with the labels used in `runs-on` below.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-arm64, target: aarch64-apple-darwin }
+          - { runner: windows-x64, target: x86_64-pc-windows-msvc }
+          - { runner: linux-x64, target: x86_64-unknown-linux-musl }
+          - { runner: linux-arm64, target: aarch64-unknown-linux-musl }
+    env:
+      CARGO_TERM_COLOR: always
+      # zstd-sys (a C dependency of unity-rs-core) needs a musl C compiler on Linux.
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CC_aarch64_unknown_linux_musl: musl-gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install musl tools
+        if: contains(matrix.target, 'linux-musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Toolchain (pinned by rust-toolchain.toml)
+        run: rustup show && rustup target add ${{ matrix.target }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked --target ${{ matrix.target }} -- -D warnings
+      - run: cargo test --workspace --locked --target ${{ matrix.target }}
+      - run: cargo build --release --locked -p ripper-cli --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ripper-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/ripper
+            target/${{ matrix.target }}/release/ripper.exe
+          if-no-files-found: error
