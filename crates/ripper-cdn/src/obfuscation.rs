@@ -25,11 +25,13 @@ pub fn deobfuscate(mut data: Vec<u8>) -> Vec<u8> {
     data
 }
 
+/// The inverse transform, for tests that need CDN-shaped bytes.
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests_support {
     use super::*;
 
-    fn obfuscate(plain: &[u8]) -> Vec<u8> {
+    /// Scrambles the first 128 bytes of `plain` (without adding the 4-byte header).
+    pub(crate) fn obfuscate_body(plain: &[u8]) -> Vec<u8> {
         let mut body = plain.to_vec();
         let scrambled = SCRAMBLED_PREFIX.min(body.len());
         for block in body[..scrambled].chunks_mut(BLOCK) {
@@ -38,8 +40,17 @@ mod tests {
                 *byte = !*byte;
             }
         }
+        body
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn obfuscate(plain: &[u8]) -> Vec<u8> {
         let mut out = vec![0x10, 0, 0, 0];
-        out.extend(body);
+        out.extend(tests_support::obfuscate_body(plain));
         out
     }
 

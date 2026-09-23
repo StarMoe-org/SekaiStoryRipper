@@ -6,7 +6,7 @@
 
 mod unity_rs;
 
-pub use unity_rs::UnityRsBundle;
+pub use unity_rs::{UnityRsBundle, content_crc32};
 
 /// Unity version of the CN 6.4.0 client. Bundle headers carry a stripped placeholder instead.
 pub const DEFAULT_UNITY_VERSION: &str = "2022.3.62f3";

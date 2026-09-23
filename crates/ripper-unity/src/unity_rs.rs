@@ -95,26 +95,35 @@ impl BundleSource for UnityRsBundle {
     }
 
     fn content_crc32(&self) -> Result<u32> {
-        struct Crc(crc32fast::Hasher);
-        impl Write for Crc {
-            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                self.0.update(buf);
-                Ok(buf.len())
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
-        }
-        let bundle =
-            UnityFsBundle::open(&self.region).map_err(|error| reader_error(&self.name, error))?;
-        let mut order: Vec<usize> = (0..bundle.entries.len()).collect();
-        order.sort_by_key(|&index| bundle.entries[index].offset);
-        let mut crc = Crc(crc32fast::Hasher::new());
-        for index in order {
-            bundle
-                .copy_entry(index, &mut crc)
-                .map_err(|error| reader_error(&self.name, error))?;
-        }
-        Ok(crc.0.finalize())
+        content_crc32_region(&self.name, &self.region)
     }
+}
+
+/// CRC32 over the decompressed entries of a UnityFS bundle in storage order, which is what the
+/// CN manifest's `crc` field holds. Only the container is parsed; no SerializedFile is loaded.
+pub fn content_crc32(name: &str, unityfs: Vec<u8>) -> Result<u32> {
+    content_crc32_region(name, &Region::from_bytes(unityfs))
+}
+
+fn content_crc32_region(name: &str, region: &Region) -> Result<u32> {
+    struct Crc(crc32fast::Hasher);
+    impl Write for Crc {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.update(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let bundle = UnityFsBundle::open(region).map_err(|error| reader_error(name, error))?;
+    let mut order: Vec<usize> = (0..bundle.entries.len()).collect();
+    order.sort_by_key(|&index| bundle.entries[index].offset);
+    let mut crc = Crc(crc32fast::Hasher::new());
+    for index in order {
+        bundle
+            .copy_entry(index, &mut crc)
+            .map_err(|error| reader_error(name, error))?;
+    }
+    Ok(crc.0.finalize())
 }

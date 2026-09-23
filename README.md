@@ -3,13 +3,30 @@
 为 **Project Sekai（CN 服 6.4.0，Unity 2022.3.62f3，iOS）** 的剧情回放抓取并解包所需资产的独立工具。
 下游消费者是 [SekaiStoryExporter](https://github.com/StarMoe-org/SekaiStoryExporter)（sse）。
 
-> 状态：**M0 完成**（workspace 骨架 + 技术栈 spike，结论 GO，见 [`docs/spike/M0-report.md`](docs/spike/M0-report.md)）。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
+> 状态：**M1 完成**：CDN 客户端、清单归档与 diff、bundle 缓存和下载。M0 结论见 [`docs/spike/M0-report.md`](docs/spike/M0-report.md)。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
 
 ## 做什么
 
 1. 从 CN CDN 匿名拉取 AssetBundle，完成反混淆、校验和缓存；
 2. 根据 masterdata 和剧本，反推出某一话需要哪些 bundle；
 3. 把 bundle 解成 sse 可以直接消费的**无损、版本化**中间格式。动作（AnimationClip）保留 StreamedClip 的原始多项式系数，**不转成 motion3**。
+
+## 用法（M1）
+
+```bash
+cp ripper.example.toml ripper.toml        # 按需修改；ripper.toml 已被 git 忽略
+export RIPPER_AB_KEY=...  RIPPER_AB_IV=... # 清单解密 key，需自行从合法持有的客户端取得（D4）
+
+ripper manifest                           # 读 CDN 版本号 → 拉取并解密清单 → 归档 → 与上一版 diff
+ripper manifest --diff-out diff.json      # 同时把 diff 写成 JSON
+ripper manifest --from-file decrypted.json --asset-version 10   # 导入已解密的清单，无需 key
+
+ripper fetch live2d/model/01ichika_normal sound/scenario/voice/nightcode_01_01
+ripper fetch --prefix scenario/effect/     # 按前缀批量下载；默认跟随清单里的 dependencies
+```
+
+缓存布局：清单在 `cache/manifests/<app>/ios<N>.msgpack.zst`，bundle 在 `cache/bundles/<bundleName>.<crc>`（已反混淆的 UnityFS）。
+每个 bundle 下载后都会校验长度（等于 `fileSize + 4`）和 CRC（对解压后的条目计算，与清单比对），通过后才原子写入缓存。
 
 ## 支持平台
 

@@ -176,7 +176,7 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 
 ### 跨平台约束（第四批决策）
 
-- **只用纯 Rust 或能在四个平台原生编译的依赖。** 目前唯一的 C 依赖是 `zstd-sys`（经 unity-rs-core 引入）。HTTP 用 reqwest + **rustls**，不引入 OpenSSL。
+- **只用纯 Rust 或能在四个平台原生编译的依赖。** 目前要编译的 C/汇编代码只有 `zstd-sys`（unity-rs-core 引入）和 `ring`（rustls 的加密后端），两者都能在四个平台上用 `cc` 原生编译。HTTP 用 reqwest + **rustls（ring 后端）+ 内置 webpki-roots 根证书**，不引入 OpenSSL 和 aws-lc（aws-lc 在 Windows 上需要 NASM/CMake，而 reqwest 0.13 默认就用它）。
 - **输出文件名要在 Windows 上合法**：替换 `<>:"/\|?*` 和控制字符；避开 `CON`、`PRN`、`AUX`、`NUL`、`COM1`–`COM9`、`LPT1`–`LPT9` 这些保留名；去掉结尾的点和空格。
 - **大小写不敏感的文件系统**（Windows NTFS、macOS APFS 默认）：同一目录下只差大小写的文件名视为冲突，写出前检测，报错并在名字后加稳定后缀，不能静默覆盖。
 - **长路径**：Rust std 在 Windows 上会自动加 `\\?\` 前缀，所以不需要额外处理。但索引 JSON 里的路径一律用 `/` 分隔的相对路径，不写平台路径。
@@ -202,7 +202,7 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 ## 6. 里程碑
 
 - **M0 spike（先做，决定 D1 是否成立）**：用 Rust + unity-rs-core 读 5 类黄金 bundle（model、motion、unitstory 剧本、bgm acb、se 大包），逐项对照 Q1、Q8、Q9、Q6。
-- **M1**：CDN 客户端、清单与 diff、缓存、`manifest` / `fetch`。
+- **M1** ✅（2026-09-23）：CDN 客户端、清单与 diff、缓存、`manifest` / `fetch`。
 - **M2**：解包 TextAsset、Texture2D→PNG、MonoBehaviour→JSON、AnimationClip→sse-motion，同时搭好 oracle 框架。
 - **M3**：masterdata 源、resolver、`plan` / `rip`、episode 索引、`ripper.lock.json`。
 - **M4**：ACB→WAV、cue 索引、SE 权威索引。

@@ -1,10 +1,22 @@
-//! CN CDN client.
+//! CN CDN client: asset version, manifest (decrypt, archive, diff), bundle download and cache.
 //!
-//! M0 only carries the two pure transforms the spike needs: bundle deobfuscation and manifest
-//! decryption. Version lookup, downloading and caching arrive in M1.
+//! Everything here is anonymous HTTPS GET (see `Sekai/ASSET_DOWNLOAD_GUIDE.md`). The only secret
+//! involved, the ABCrypt manifest key, is supplied by the user (decision D4).
 
+pub mod cache;
+pub mod client;
+pub mod config;
+pub mod diff;
+pub mod download;
 pub mod manifest;
 pub mod obfuscation;
+pub mod portable;
+pub mod store;
 
+pub use cache::BundleCache;
+pub use client::{CdnClient, CdnError};
+pub use config::CdnConfig;
+pub use diff::ManifestDiff;
 pub use manifest::{BundleEntry, Manifest, ManifestKey};
 pub use obfuscation::deobfuscate;
+pub use store::ManifestStore;
