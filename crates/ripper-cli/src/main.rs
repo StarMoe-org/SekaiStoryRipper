@@ -83,6 +83,9 @@ enum Command {
         /// Unpack again even when the library already holds this bundle content.
         #[arg(long)]
         force: bool,
+        /// Also keep ASTC textures' original blocks as .astc files next to the PNGs.
+        #[arg(long)]
+        keep_astc: bool,
     },
 }
 
@@ -140,6 +143,7 @@ async fn main() -> anyhow::Result<()> {
             asset_version,
             no_deps,
             force,
+            keep_astc,
         } => {
             unpack_cmd::run(
                 &config,
@@ -149,6 +153,7 @@ async fn main() -> anyhow::Result<()> {
                     asset_version,
                     no_deps,
                     force,
+                    keep_astc,
                 },
             )
             .await

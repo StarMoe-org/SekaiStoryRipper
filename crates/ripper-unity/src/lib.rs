@@ -60,6 +60,16 @@ pub struct ContainerEntry {
     pub id: ObjectId,
 }
 
+/// A `Texture2D`'s stored (still compressed) image data, all mips, in Unity's bottom-up row order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawTexture {
+    pub width: u32,
+    pub height: u32,
+    /// Unity `TextureFormat` id (50 = ASTC_RGB_6x6).
+    pub format: i32,
+    pub data: Vec<u8>,
+}
+
 /// Tightly packed RGBA8 pixels, top row first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RgbaImage {
@@ -79,6 +89,9 @@ pub trait BundleSource: Sized {
 
     /// Decodes mip 0 of a `Texture2D`.
     fn texture_rgba(&self, id: ObjectId) -> Result<RgbaImage>;
+
+    /// The stored image data of a `Texture2D`, without decoding.
+    fn texture_raw(&self, id: ObjectId) -> Result<RawTexture>;
 
     /// Raw `m_Script` bytes of a `TextAsset` (moc3, json, acb, ...).
     fn text_asset(&self, id: ObjectId) -> Result<Vec<u8>>;

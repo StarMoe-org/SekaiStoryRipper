@@ -210,7 +210,7 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 - **M1** ✅（2026-09-23）：CDN 客户端、清单与 diff、缓存、`manifest` / `fetch`。
 - **M2** ✅ 核心完成（2026-09-23）：`ripper unpack`，解包 TextAsset、Texture2D→PNG、MonoBehaviour→JSON、AnimationClip→sse-motion。
   - 增量：记录里 crc 或格式版本变化时重新解包；记录里的未解析 binding 哈希在有新模型后变得可解析时，也会重新解包。
-  - 遗留：D8 可选的 `.astc` 原始数据保留；oracle 对照目前针对 `spike` 输出，还要改成直接对照 library。
+  - D8 可选的 `.astc` 已实现（`--keep-astc`：mip0 数据块加标准 16 字节头，保持 Unity 行序）；oracle 对照已改为直接针对 library（`tools/oracle/library/`）。
 - **M3**：masterdata 源、resolver、`plan` / `rip`、episode 索引、`ripper.lock.json`。
 - **M4** ✅ 解包部分完成（2026-09-23）：ACB 每个物理 waveform 输出一个 WAV，`<x>.cues.json`（`ripper-acb` v1，cue 名取自 CueNameTable，按 track 顺序引用 waveform），`<x>.tables.json`（全部 UTF 表），并保留原始 ACB。实测分块 BGM `bgm90001` 为 1 个 cue、262 次 track 引用、185 个 waveform。SE 权威索引在 M3 的解析器里实现。HCA 的极性和 v3 验证仍待 vgmstream（S6）。
 - **M5** ✅ 解包部分完成（2026-09-23）：

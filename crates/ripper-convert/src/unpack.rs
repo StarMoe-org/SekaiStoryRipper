@@ -85,6 +85,8 @@ fn write_file(dir: &Path, relative: &str, bytes: &[u8]) -> Result<()> {
 pub struct UnpackOptions {
     /// ffmpeg executable for movie ADX → WAV. `None` keeps the `.adx` only (with a note).
     pub ffmpeg: Option<std::path::PathBuf>,
+    /// Also write ASTC textures' original blocks as `<x>.astc` next to the PNG (decision D8).
+    pub keep_astc: bool,
 }
 
 /// One output file before it is written: `(relative path, kind, bytes)`.
@@ -276,88 +278,100 @@ pub fn unpack_bundle<B: BundleSource>(
                 relative_owned.as_str()
             }
         };
-        let converted: Result<Vec<Output>> =
-            match object.class_id {
-                class_id::FONT => bundle.font_file(asset.id).map_err(ConvertError::from).map(
-                    |(bytes, extension)| {
+        let converted: Result<Vec<Output>> = match object.class_id {
+            class_id::FONT => {
+                bundle
+                    .font_file(asset.id)
+                    .map_err(ConvertError::from)
+                    .map(|(bytes, extension)| {
                         let path = if relative.rsplit('/').next().is_some_and(|f| f.contains('.')) {
                             relative.to_owned()
                         } else {
                             format!("{relative}.{extension}")
                         };
                         vec![(path, FileKind::Font, bytes)]
-                    },
-                ),
-                class_id::TEXT_ASSET => bundle
-                    .text_asset(asset.id)
-                    .map_err(ConvertError::from)
-                    .and_then(|bytes| {
-                        let path = with_suffix(relative, ".bytes", "");
-                        if path.ends_with(".acb") && bytes.starts_with(b"@UTF") {
-                            acb_outputs(&path, bytes)
-                        } else {
-                            Ok(vec![(path, FileKind::Text, bytes)])
-                        }
-                    }),
-                class_id::TEXTURE_2D => bundle
-                    .texture_rgba(asset.id)
-                    .map_err(ConvertError::from)
-                    .and_then(|image| encode_png(&image))
-                    .map(|png| {
-                        let path = if relative.ends_with(".png") {
-                            relative.to_owned()
-                        } else {
-                            format!("{relative}.png")
-                        };
-                        vec![(path, FileKind::Png, png)]
-                    }),
-                class_id::ANIMATION_CLIP => {
-                    let stem = asset.path.strip_suffix(".anim").unwrap_or(&asset.path);
-                    let source = Source {
-                        bundle: name.into(),
-                        path_id: asset.id.path_id,
-                        container: Some(asset.path.clone()),
+                    })
+            }
+            class_id::TEXT_ASSET => bundle
+                .text_asset(asset.id)
+                .map_err(ConvertError::from)
+                .and_then(|bytes| {
+                    let path = with_suffix(relative, ".bytes", "");
+                    if path.ends_with(".acb") && bytes.starts_with(b"@UTF") {
+                        acb_outputs(&path, bytes)
+                    } else {
+                        Ok(vec![(path, FileKind::Text, bytes)])
+                    }
+                }),
+            class_id::TEXTURE_2D => bundle
+                .texture_rgba(asset.id)
+                .map_err(ConvertError::from)
+                .and_then(|image| encode_png(&image))
+                .map(|png| {
+                    let path = if relative.ends_with(".png") {
+                        relative.to_owned()
+                    } else {
+                        format!("{relative}.png")
                     };
-                    bundle
-                        .typetree_json(asset.id)
-                        .map_err(ConvertError::from)
-                        .and_then(|clip| clip_to_motion(&clip, metas.get(stem), names, source))
-                        .inspect(|motion| {
-                            // Path 0 marks component-level curves (EyeOpening, MouthOpening): nothing to name.
-                            unresolved.extend(
-                                motion
-                                    .curves
-                                    .iter()
-                                    .filter(|c| {
-                                        c.binding.resolved.is_none() && c.binding.path_hash != 0
-                                    })
-                                    .map(|c| c.binding.path_hash),
-                            );
-                        })
-                        .and_then(|motion| {
-                            serde_json::to_vec(&motion)
-                                .map_err(|e| malformed("sse-motion", e.to_string()))
-                        })
-                        .map(|json| {
-                            vec![(
-                                with_suffix(relative, ".anim", ".sse-motion.json"),
-                                FileKind::Motion,
-                                json,
-                            )]
-                        })
-                }
-                _ => bundle
+                    let astc = options
+                        .keep_astc
+                        .then(|| bundle.texture_raw(asset.id).ok())
+                        .flatten()
+                        .and_then(|raw| crate::texture::astc_file(&raw));
+                    let mut outputs = Vec::new();
+                    if let Some(astc) = astc {
+                        outputs.push((with_suffix(&path, ".png", ".astc"), FileKind::Astc, astc));
+                    }
+                    outputs.insert(0, (path, FileKind::Png, png));
+                    outputs
+                }),
+            class_id::ANIMATION_CLIP => {
+                let stem = asset.path.strip_suffix(".anim").unwrap_or(&asset.path);
+                let source = Source {
+                    bundle: name.into(),
+                    path_id: asset.id.path_id,
+                    container: Some(asset.path.clone()),
+                };
+                bundle
                     .typetree_json(asset.id)
                     .map_err(ConvertError::from)
-                    .and_then(|tree| json_bytes(&tree, "typetree"))
+                    .and_then(|clip| clip_to_motion(&clip, metas.get(stem), names, source))
+                    .inspect(|motion| {
+                        // Path 0 marks component-level curves (EyeOpening, MouthOpening): nothing to name.
+                        unresolved.extend(
+                            motion
+                                .curves
+                                .iter()
+                                .filter(|c| {
+                                    c.binding.resolved.is_none() && c.binding.path_hash != 0
+                                })
+                                .map(|c| c.binding.path_hash),
+                        );
+                    })
+                    .and_then(|motion| {
+                        serde_json::to_vec(&motion)
+                            .map_err(|e| malformed("sse-motion", e.to_string()))
+                    })
                     .map(|json| {
                         vec![(
-                            with_suffix(relative, ".asset", ".json"),
-                            FileKind::Typetree,
+                            with_suffix(relative, ".anim", ".sse-motion.json"),
+                            FileKind::Motion,
                             json,
                         )]
-                    }),
-            };
+                    })
+            }
+            _ => bundle
+                .typetree_json(asset.id)
+                .map_err(ConvertError::from)
+                .and_then(|tree| json_bytes(&tree, "typetree"))
+                .map(|json| {
+                    vec![(
+                        with_suffix(relative, ".asset", ".json"),
+                        FileKind::Typetree,
+                        json,
+                    )]
+                }),
+        };
         match converted {
             Ok(outputs) => {
                 for output in outputs {
@@ -584,6 +598,14 @@ mod tests {
         }
         fn font_file(&self, id: ObjectId) -> ripper_unity::Result<(Vec<u8>, String)> {
             Ok((self.text_asset(id)?, "otf".into()))
+        }
+        fn texture_raw(&self, _: ObjectId) -> ripper_unity::Result<ripper_unity::RawTexture> {
+            Ok(ripper_unity::RawTexture {
+                width: 6,
+                height: 6,
+                format: 50,
+                data: vec![0; 16],
+            })
         }
         fn content_crc32(&self) -> ripper_unity::Result<u32> {
             Ok(0)

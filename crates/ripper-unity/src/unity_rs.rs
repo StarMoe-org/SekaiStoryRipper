@@ -5,7 +5,7 @@ use unity_rs_core::{
     texture::TextureReadLimits,
 };
 
-use crate::{BundleSource, ObjectId, ObjectInfo, Result, RgbaImage, UnityError};
+use crate::{BundleSource, ObjectId, ObjectInfo, RawTexture, Result, RgbaImage, UnityError};
 
 /// Upper bound for one typetree JSON document or TextAsset (the largest SE pack is ~50 MB).
 const MAX_OBJECT_BYTES: usize = 512 << 20;
@@ -85,6 +85,29 @@ impl BundleSource for UnityRsBundle {
             width: image.width,
             height: image.height,
             pixels,
+        })
+    }
+
+    fn texture_raw(&self, id: ObjectId) -> Result<RawTexture> {
+        let object = self.object(id)?;
+        let collection = self.studio.collection();
+        let file = &collection.serialized_files()[object.file_index()].file;
+        let texture = unity_rs_core::texture::read_texture2d(
+            collection,
+            file,
+            object.object_index(),
+            TextureReadLimits::default(),
+        )
+        .map_err(|error| reader_error(&self.name, error))?;
+        let data = texture
+            .data
+            .read_to_vec(MAX_OBJECT_BYTES as u64)
+            .map_err(|error| reader_error(&self.name, error))?;
+        Ok(RawTexture {
+            width: texture.width,
+            height: texture.height,
+            format: texture.format.0,
+            data,
         })
     }
 

@@ -26,6 +26,7 @@ ripper fetch --prefix scenario/effect/     # 按前缀批量下载；默认跟�
 
 ripper unpack live2d/model/01ichika_normal live2d/motion/01ichika_motion_base   # 缺的先下载，再解包到 out/library/
 ripper unpack --prefix scenario/unitstory/ --force                             # 忽略已有结果，重新解包
+ripper unpack --keep-astc scenario/background/bg_a000001                       # 额外保留原始 ASTC（.astc，Unity 行序）
 ```
 
 解包布局：`out/library/<bundleName>/<container 相对路径>`。

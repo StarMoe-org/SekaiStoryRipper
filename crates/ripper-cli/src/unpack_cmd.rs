@@ -21,6 +21,7 @@ pub struct Args {
     pub asset_version: Option<u32>,
     pub no_deps: bool,
     pub force: bool,
+    pub keep_astc: bool,
 }
 
 /// Every Live2D parameter/part id seen in any unpacked moc3: `library/_index/live2d-ids.json`.
@@ -125,7 +126,10 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
             config.tools.ffmpeg.display()
         );
     }
-    let options = UnpackOptions { ffmpeg };
+    let options = UnpackOptions {
+        ffmpeg,
+        keep_astc: args.keep_astc,
+    };
     let force = args.force;
     let outcomes: Vec<(String, Outcome)> = tokio::task::spawn_blocking(move || {
         entries

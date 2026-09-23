@@ -49,6 +49,8 @@ pub enum FileKind {
     Text,
     /// `Texture2D` decoded to RGBA PNG.
     Png,
+    /// ASTC texture's original blocks (mip 0) as a `.astc` file, Unity row order (opt-in).
+    Astc,
     /// `AnimationClip` as `sse-motion` JSON.
     Motion,
     /// Any other object's embedded typetree as JSON (ScenarioSceneData, BuildModelData, prefabs, ...).
