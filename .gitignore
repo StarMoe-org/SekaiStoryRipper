@@ -1,0 +1,32 @@
+/target
+**/*.rs.bk
+
+# 游戏资产与派生资产：任何情况下都不入库（见 README）
+/cache/
+/out/
+*.bundle
+*.acb
+*.awb
+*.hca
+*.usm
+*.moc3
+*.wav
+*.png
+*.astc
+!docs/**/*.png
+
+# 本地配置（可能含用户自行提供的 ABCrypt key）
+/ripper.toml
+/ripper.local.toml
+.env
+
+# 逆向中间产物（体积大且含游戏代码，只提交提炼后的结论）
+/dumps/
+dump.cs
+stringliteral.json
+script.json
+global-metadata.dat
+
+# oracle 工具（Python/uv）
+tools/oracle/.venv/
+__pycache__/
