@@ -208,7 +208,9 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 **第二批已拍板**：D10 = A（分层解析 + 全量校验）**+ 先逆向真实规则**（工单见 `docs/reverse/RE-R01-motion-bundle-mapping.md`）· D12 = ripper 解析 + 保留哈希 · D14 = 默认告警，`--strict` 时失败 · D15 = masterdata 使用配置文件里可配置的 URL（默认 haruki raw HEAD，不强制锁 sha）。
 **D5**：没有单独作答，按原始需求「本工具不分发任何游戏资产」执行，即仓库不放资产，只放哈希和统计。
 
-**D10 新证据**：BuildModelData 字段只有 Moc3FileName/TextureNames/PhysicsFileName/UserDataFileName/AdditionalMotionData/CategoryRules，**没有动作包引用**（Q2 = 否）；MonoBehaviour 的 typetree 可以直接读（Q1 倾向为「内嵌」）。规则 R1（character2ds.assetName+`_motion_base`）命中 357/371，另有 200 条没有 assetName；规则 R2（CostumeType 最长前缀匹配）命中 637/648，0 歧义；第 1 章 21 个组合两条规则全部一致。
+**D10 逆向结论（RE-R01，2026-09-23）**：真实规则就是 R1，动作包 = `live2d/motion/<character2ds[Character2dId].assetName>_motion_base`，与 CostumeType 无关，客户端没有例外表；名字查找先查模型包 container、再查动作包，不区分大小写。**建议**（待拍板）：resolver 只保留「逆向规则 + 配置覆盖」两层，删除 R2 及之后的启发式（R2 在 42/592 个组合上静默选错包）。详见 `docs/reverse/cn-6.4.0/live2d-bundle-resolution.md`。
+
+**D10 新证据**（逆向前的途径 A 数据，保留备查）：BuildModelData 字段只有 Moc3FileName/TextureNames/PhysicsFileName/UserDataFileName/AdditionalMotionData/CategoryRules，**没有动作包引用**（Q2 = 否）；MonoBehaviour 的 typetree 可以直接读（Q1 倾向为「内嵌」）。规则 R1（character2ds.assetName+`_motion_base`）命中 357/371，另有 200 条没有 assetName；规则 R2（CostumeType 最长前缀匹配）命中 637/648，0 歧义；第 1 章 21 个组合两条规则全部一致。
 
 > 每条格式：选项 / 代价 / **推荐**。
 
