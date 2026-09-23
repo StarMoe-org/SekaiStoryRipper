@@ -1,0 +1,5 @@
+# 与 SekaiStoryExporter 保持同一工具链，避免两边浮点/优化行为不一致。
+[toolchain]
+channel    = "1.98.1"
+components = ["rustfmt", "clippy"]
+targets    = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc"]

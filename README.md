@@ -3,7 +3,7 @@
 为 **Project Sekai（CN 服 6.4.0，Unity 2022.3.62f3，iOS）** 的剧情回放抓取并解包所需资产的独立工具。
 下游消费者是 [SekaiStoryExporter](https://github.com/StarMoe-org/SekaiStoryExporter)（sse）。
 
-> 状态：**规划完成，尚未开始实现**。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
+> 状态：**M0 完成**（workspace 骨架 + 技术栈 spike，结论 GO，见 [`docs/spike/M0-report.md`](docs/spike/M0-report.md)）。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
 
 ## 做什么
 

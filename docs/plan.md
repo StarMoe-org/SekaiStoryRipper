@@ -38,7 +38,7 @@ SekaiStoryExporter（sse，Rust，AGPL-3.0-or-later + Cubism 链接例外）要�
 | 剧本 | 按 masterdata 表定位（F2），按 `ScenarioId` 选对象 | MonoBehaviour ScenarioSceneData | ✅ | typetree JSON，字段名与 C# 一致，格式和现有 `assets/scenario/*.json` 相同 |
 | 背景 | `NeedBundleNames` 里的 `scenario/background/*`，以及 `FirstBackground` 和 EffectType 7 的 `StringVal`（取并集，防止 NeedBundleNames 漏项） | Texture2D/Sprite（ASTC） | ✅ | PNG |
 | Live2D 模型 | `AppearCharacters[].CostumeType`，以及 LayoutData 里出现的 CostumeType，拼成 `live2d/model/<x>` | moc3 / physics3 / model3（TextAsset）、texture_00、BuildModelData | ✅ | 原样文件 + PNG + BuildModelData JSON |
-| Live2D 动作 | 模型 → `<base>_motion_base`（映射见 D10） | AnimationClip ×N、MotionMetaData、BuildMotionData | ✅ | **sse-motion JSON**（§3） |
+| Live2D 动作 | `live2d/motion/<character2ds[Character2dId].assetName>_motion_base`（RE-R01）；动作名先查模型包、再查动作包 | AnimationClip ×N、MotionMetaData、BuildMotionData | ✅ | **sse-motion JSON**（§3） |
 | 语音 | `sound/scenario/voice/<ScenarioId>`（卡面剧情用 `sound/card_scenario/voice/…`）；FullScreenText 的 `StringValSub`；part_voice 规则待确认 | TextAsset `.acb` | ✅ | 按 cue 输出 WAV + cue 索引 |
 | BGM | `FirstBgm` 和 `SoundData.Bgm`，拼成 `sound/scenario/bgm/<bgm>` | `.acb` | ✅ | WAV + 原 ACB + block/loop 元数据 |
 | SE | `SoundData.Se`，通过「cue 名 → 包」的**权威索引**定位（索引来自扫描 3 个 SE 包和 `event_story/*/scenario_se` 的 cue 表，不猜规则） | `.acb` | ✅ | WAV（只输出被引用的 cue） |
@@ -150,7 +150,7 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 
 - **清单**：按 `(app, N)` 归档，存解密后的 msgpack+zstd，保留历史。`diff` 按 bundleName 比较 crc 和 fileSize，输出新增、变更、删除。
 - **bundle 缓存**：键为 `(bundleName, crc)`，存反混淆后的 UnityFS，写一个 `.meta` 记录 downloadPath、size、下载时间。
-  - 校验：长度必须等于 `fileSize+4`。crc 用 CRC32 校验（算法待确认 Q13）。
+  - 校验：长度必须等于 `fileSize+4`。crc 在解压后校验：按顺序拼接全部解压后的条目再算 CRC32（M0 已验证，Q13）。
   - 写入原子化：先写 tmp 再 rename。
   - 对大文件做流式下载，支持断点续传（Range 请求）。
 - **产物增量**：每个 library 条目记录它的源 `(bundle, crc)` 和 format 版本。源没变且版本没变就跳过。
@@ -208,7 +208,14 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 **第二批已拍板**：D10 = A（分层解析 + 全量校验）**+ 先逆向真实规则**（工单见 `docs/reverse/RE-R01-motion-bundle-mapping.md`）· D12 = ripper 解析 + 保留哈希 · D14 = 默认告警，`--strict` 时失败 · D15 = masterdata 使用配置文件里可配置的 URL（默认 haruki raw HEAD，不强制锁 sha）。
 **D5**：没有单独作答，按原始需求「本工具不分发任何游戏资产」执行，即仓库不放资产，只放哈希和统计。
 
-**D10 逆向结论（RE-R01，2026-09-23）**：真实规则就是 R1，动作包 = `live2d/motion/<character2ds[Character2dId].assetName>_motion_base`，与 CostumeType 无关，客户端没有例外表；名字查找先查模型包 container、再查动作包，不区分大小写。**建议**（待拍板）：resolver 只保留「逆向规则 + 配置覆盖」两层，删除 R2 及之后的启发式（R2 在 42/592 个组合上静默选错包）。详见 `docs/reverse/cn-6.4.0/live2d-bundle-resolution.md`。
+**D10 逆向结论（RE-R01，2026-09-23）**：真实规则就是 R1，动作包 = `live2d/motion/<character2ds[Character2dId].assetName>_motion_base`，与 CostumeType 无关，客户端没有例外表；名字查找先查模型包 container、再查动作包，不区分大小写。详见 `docs/reverse/cn-6.4.0/live2d-bundle-resolution.md`。
+
+**第三批已拍板（RE-R01 之后）**：
+- **D10 修订**：resolver 只保留「逆向规则 + 配置覆盖表」两层，删除 R2 及之后的启发式（R2 在 42/592 个组合上会静默选错包）；解析不出来就报 warning。解析单位是 `(Character2dId, CostumeType)`。
+- **模型包自带的 clip**：各包各存（模型包的放 `library/live2d/model/<costume>/clips/`），episode 索引按 `(id, costume)` 给出按游戏规则解析好的「动作名 → clip」表。
+- **逆向结论进代码**：手写常量，并由单元测试对照 `live2d-bundle-resolution.yaml`（`ripper-resolve::live2d`）。
+
+**M0 结论（2026-09-23）**：GO，保持 D1。详见 [`spike/M0-report.md`](spike/M0-report.md)。
 
 **D10 新证据**（逆向前的途径 A 数据，保留备查）：BuildModelData 字段只有 Moc3FileName/TextureNames/PhysicsFileName/UserDataFileName/AdditionalMotionData/CategoryRules，**没有动作包引用**（Q2 = 否）；MonoBehaviour 的 typetree 可以直接读（Q1 倾向为「内嵌」）。规则 R1（character2ds.assetName+`_motion_base`）命中 357/371，另有 200 条没有 assetName；规则 R2（CostumeType 最长前缀匹配）命中 637/648，0 歧义；第 1 章 21 个组合两条规则全部一致。
 
@@ -376,19 +383,19 @@ Moe 那种「Rust 编排 + C# NativeAOT FFI」的混合方案复杂度最高，�
 
 ## 8. 待确认清单（不阻塞规划，M0 或 M3 时核实）
 
-- **Q1** CDN bundle 里的 ScenarioSceneData、Live2DBuildMotionMetaData、BuildModelData、BuildMotionData 是否**内嵌 typetree**？如果没有，要从 dump.cs 生成外部 schema（unity-rs 支持）。
-- **Q2** BuildModelData 或 model3.json 里有没有指向动作包的字段？
-- **Q3** CN 卡面剧情的剧本 bundle 路径是什么：`character/member_scenario/<ab>` 还是 `character/member/<ab>`？清单里 `character/member` 有 1352 个。
+- **Q1** CDN bundle 里的 ScenarioSceneData、Live2DBuildMotionMetaData、BuildModelData、BuildMotionData 是否**内嵌 typetree**？如果没有，要从 dump.cs 生成外部 schema（unity-rs 支持）。 → ✅ 已答（M0 S3）：全部内嵌，不需要外部 schema。
+- **Q2** BuildModelData 或 model3.json 里有没有指向动作包的字段？ → ✅ 已答（RE-R01）：没有。
+- **Q3** CN 卡面剧情的剧本 bundle 路径是什么：`character/member_scenario/<ab>` 还是 `character/member/<ab>`？清单里 `character/member` 有 1352 个。 → ✅ 已答（RE-R01）：`character/member/<cards[cardId].assetbundleName>`。
 - **Q4** `vs<ScenarioId>` 语音包和 `part_voice*` 的规则是什么？sekai-viewer 里的 ScenarioId→bundle 修正（活动 167–176 加 1 等）在 CN 上是否成立？
-- **Q5** `IncludeSoundDataBundleNames`（例如 `scenario/effect/hologram`）里是不是带 ACB？
-- **Q6** cridecoder 能否读出 ACB 的 block、AISAC、循环点？它对 HCA v3 + HFR 的解码是否正确（对照 vgmstream 或 hca.py）？
-- **Q7** scenario/movie 里 USM 的视频编码是什么（VP9、H.264 还是 MPEG-1），有几条音轨？
-- **Q8** unity-rs-core 实测：显式版本覆盖能否处理抹成 `5.x.x` 的头；能否拿到 AnimationClip 完整的 `m_MuscleClip`、`m_ClipBindingConstant`、`m_Events` 原始字段；ASTC 解码是否和 astcenc 一致。
-- **Q9** StreamedClip 末尾是否有 +FLT_MAX 哨兵帧；2022.3.62 下 curveCount 是 u16 还是 u32（AssetStudio 按 2022.3.19 以上 u16 处理）。
+- **Q5** `IncludeSoundDataBundleNames`（例如 `scenario/effect/hologram`）里是不是带 ACB？ → ✅ 已答（M0）：`hologram` 里没有 ACB；`IncludeSoundDataBundleNames` 的含义仍待确认。
+- **Q6** cridecoder 能否读出 ACB 的 block、AISAC、循环点？它对 HCA v3 + HFR 的解码是否正确（对照 vgmstream 或 hca.py）？ → ⚠️ 部分已答（M0）：block/AISAC 表完整导出，HCA 循环点能读到；分块 BGM 必须按 waveform 导出；PCM 极性和 v3 正确性待 vgmstream 裁定。
+- **Q7** scenario/movie 里 USM 的视频编码是什么（VP9、H.264 还是 MPEG-1），有几条音轨？ → ✅ 已答（M0）：按 MovieBundleBuildData 拆片；视频 MPEG-1，音频 CRI ADX。
+- **Q8** unity-rs-core 实测：显式版本覆盖能否处理抹成 `5.x.x` 的头；能否拿到 AnimationClip 完整的 `m_MuscleClip`、`m_ClipBindingConstant`、`m_Events` 原始字段；ASTC 解码是否和 astcenc 一致。 → ✅ 已答（M0 S1/S4/S5）：全部可以。
+- **Q9** StreamedClip 末尾是否有 +FLT_MAX 哨兵帧；2022.3.62 下 curveCount 是 u16 还是 u32（AssetStudio 按 2022.3.19 以上 u16 处理）。 → ✅ 已答（M0）：末尾有 +∞ 哨兵帧；curveCount 和 discreteCurveCount 是两个独立字段。
 - **Q10** m_Events 里除了 eyeblink，还有没有别的 functionName 或 data 前缀？
-- **Q11** 名字里带 `_back`、`v2_`、`clb01_` 的模型在剧本里怎么出现（和 D10 相关）。
+- **Q11** 名字里带 `_back`、`v2_`、`clb01_` 的模型在剧本里怎么出现（和 D10 相关）。 → ✅ 已答（RE-R01）：都是独立的 character2d 条目。
 - **Q12** haruki masterdata 相对 CDN 的更新延迟；卡面剧情要用的 `cards.assetbundleName` 在不在里面。
-- **Q13** 清单里的 `crc` 是哪种算法、针对什么内容（混淆前还是混淆后），能否用来做完整性校验。
+- **Q13** 清单里的 `crc` 是哪种算法、针对什么内容（混淆前还是混淆后），能否用来做完整性校验。 → ✅ 已答（M0 S8）：按顺序拼接全部解压后的条目，再算 CRC32。
 - **Q14** CN 客户端的服务条款对个人解包和复刻的约束（这是法律问题，由你判断）。
 - **Q15** 特效 prefab 在 sse 里打算怎么用（烘焙序列帧还是实时粒子），这决定 ripper 要导出多少对象图细节。
 
