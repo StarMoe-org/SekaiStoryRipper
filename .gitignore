@@ -29,4 +29,5 @@ global-metadata.dat
 
 # oracle 工具（Python/uv）
 tools/oracle/.venv/
+tools/oracle/**/work/
 __pycache__/

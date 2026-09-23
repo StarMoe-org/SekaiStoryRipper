@@ -34,7 +34,7 @@ Rust（edition 2024）多 crate workspace：
 
 ## 逆向工单
 
-- [`docs/reverse/RE-R01-motion-bundle-mapping.md`](docs/reverse/RE-R01-motion-bundle-mapping.md)：Live2D 模型到动作包的映射规则（对应决策 D10）
+- [`docs/reverse/RE-R01-motion-bundle-mapping.md`](docs/reverse/RE-R01-motion-bundle-mapping.md)：Live2D 模型到动作包的映射规则（对应决策 D10）。**已完成**，结论见 [`docs/reverse/cn-6.4.0/live2d-bundle-resolution.md`](docs/reverse/cn-6.4.0/live2d-bundle-resolution.md)
 
 ## 许可证
 
