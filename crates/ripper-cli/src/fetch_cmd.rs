@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use ripper_cdn::download::{FetchStatus, Verifier, fetch_all};
-use ripper_cdn::{BundleCache, BundleEntry, CdnClient, Manifest, ManifestStore};
+use ripper_cdn::{BundleEntry, Manifest, ManifestStore, Region};
 
 use crate::config::Config;
 
 pub struct Args {
     pub names: Vec<String>,
     pub prefixes: Vec<String>,
-    pub asset_version: Option<u32>,
+    pub asset_version: Option<String>,
     pub no_deps: bool,
     pub no_verify: bool,
 }
@@ -60,28 +60,36 @@ pub fn select(
         .collect())
 }
 
-/// Checks the manifest CRC over the decompressed bundle entries.
-pub fn crc_verifier() -> Verifier {
-    Arc::new(|entry: &BundleEntry, data: &[u8]| {
+/// Checks the manifest CRC over the decompressed bundle entries (which also proves the bundle
+/// decompresses). For JP a mismatch is only reported: the game never checks it and uses what the
+/// CDN serves (see `CdnClient::bundle`).
+pub fn crc_verifier(region: Region) -> Verifier {
+    Arc::new(move |entry: &BundleEntry, data: &[u8]| {
         let crc = ripper_unity::content_crc32(&entry.bundle_name, data.to_vec())
             .map_err(|e| e.to_string())?;
         if crc == entry.crc {
-            Ok(())
-        } else {
-            Err(format!(
-                "content crc {crc:08x} != manifest {:08x}",
-                entry.crc
-            ))
+            return Ok(());
+        }
+        let message = format!("content crc {crc:08x} != manifest {:08x}", entry.crc);
+        match region {
+            Region::Cn => Err(message),
+            Region::Jp => {
+                eprintln!(
+                    "note: {}: {message} (served as the game gets it)",
+                    entry.bundle_name
+                );
+                Ok(())
+            }
         }
     })
 }
 
 /// Loads the latest archived manifest, or the given version.
-pub fn load_manifest(config: &Config, asset_version: Option<u32>) -> Result<(u32, Manifest)> {
+pub fn load_manifest(config: &Config, asset_version: Option<&str>) -> Result<(String, Manifest)> {
     let store = ManifestStore::new(&config.paths.cache, &config.cdn.platform);
     let app = &config.cdn.app_version;
     Ok(match asset_version {
-        Some(version) => (version, store.load(app, version)?),
+        Some(version) => (version.to_owned(), store.load(app, version)?),
         None => store
             .latest(app)?
             .context("no archived manifest; run `ripper manifest` first")?,
@@ -90,15 +98,15 @@ pub fn load_manifest(config: &Config, asset_version: Option<u32>) -> Result<(u32
 
 /// Downloads whatever of `entries` is not cached yet; fails if any bundle could not be fetched.
 pub async fn ensure_cached(config: &Config, entries: Vec<BundleEntry>, verify: bool) -> Result<()> {
-    let client = Arc::new(CdnClient::new(config.cdn.clone(), None)?);
-    let cache = Arc::new(BundleCache::new(&config.paths.cache));
+    let client = Arc::new(config.cdn_client(config.cdn.clone())?);
+    let cache = Arc::new(config.bundle_cache());
     let count = entries.len();
     let mut done = 0usize;
     let outcomes = fetch_all(
         client,
         cache,
         entries,
-        verify.then(crc_verifier),
+        verify.then(|| crc_verifier(config.cdn.region)),
         |outcome| {
             done += 1;
             if outcome.status != FetchStatus::Cached {
@@ -128,7 +136,7 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
     if args.names.is_empty() && args.prefixes.is_empty() {
         bail!("name at least one bundle or --prefix");
     }
-    let (version, manifest) = load_manifest(config, args.asset_version)?;
+    let (version, manifest) = load_manifest(config, args.asset_version.as_deref())?;
     let entries = select(&manifest, &args.names, &args.prefixes, !args.no_deps)?;
     let total: u64 = entries.iter().map(|e| e.file_size).sum();
     eprintln!(
@@ -138,10 +146,10 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
         total as f64 / 1e6
     );
 
-    let verify = (!args.no_verify).then(crc_verifier);
+    let verify = (!args.no_verify).then(|| crc_verifier(config.cdn.region));
 
-    let client = Arc::new(CdnClient::new(config.cdn.clone(), None)?);
-    let cache = Arc::new(BundleCache::new(&config.paths.cache));
+    let client = Arc::new(config.cdn_client(config.cdn.clone())?);
+    let cache = Arc::new(config.bundle_cache());
     let count = entries.len();
     let mut done = 0usize;
     let outcomes = fetch_all(client, cache, entries, verify, |outcome| {

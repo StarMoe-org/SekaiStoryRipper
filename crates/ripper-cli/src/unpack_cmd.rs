@@ -18,7 +18,7 @@ use crate::fetch_cmd::{ensure_cached, load_manifest, select};
 pub struct Args {
     pub names: Vec<String>,
     pub prefixes: Vec<String>,
-    pub asset_version: Option<u32>,
+    pub asset_version: Option<String>,
     pub no_deps: bool,
     pub force: bool,
     pub keep_astc: bool,
@@ -88,7 +88,7 @@ pub async fn run(config: &Config, args: Args) -> Result<()> {
     if args.names.is_empty() && args.prefixes.is_empty() {
         bail!("name at least one bundle or --prefix");
     }
-    let (version, manifest) = load_manifest(config, args.asset_version)?;
+    let (version, manifest) = load_manifest(config, args.asset_version.as_deref())?;
     let entries = select(&manifest, &args.names, &args.prefixes, !args.no_deps)?;
     eprintln!(
         "{}{version}: {} bundles",
@@ -128,7 +128,7 @@ pub async fn unpack_entries(
     ensure_cached(config, entries.clone(), true).await?;
 
     let library = config.paths.out.join("library");
-    let cache = BundleCache::new(&config.paths.cache);
+    let cache = config.bundle_cache();
     let unity = config.unity.version.clone();
 
     // Models first, so clips in this batch can name every parameter of the models alongside them.

@@ -2,6 +2,12 @@
 # Every value below is the built-in default; delete what you do not change.
 
 [cdn]
+# "cn" or "jp" (or pass --region). The region picks every default below; the values shown are CN's.
+# For JP, `region = "jp"` alone is enough: it logs in with a guest account kept in
+# <cache>/account.json and uses cache/jp, out/jp. JP-only settings live in [cdn.jp]
+# (version_api, app_hash, bundle_host, info_host, signed_cookie_url, asset_hash, device_model,
+# operating_system); see crates/ripper-cdn/src/config.rs.
+region = "cn"
 hosts = [
     "https://lf3-mkcncdn-tos.dailygn.com",
     "https://lf6-mkcncdn-tos.dailygn.com",
@@ -9,7 +15,7 @@ hosts = [
     "https://lf26-mkcncdn-tos.dailygn.com",
 ]
 app_version = "6.4.0"
-# asset_version = 10        # pin ios{N}; by default the CDN `version` file is read first
+# asset_version = "10"      # pin ios{N} (JP: "6.8.0.50" plus cdn.jp.asset_hash); by default the server is asked
 app_id = "gdl_app_5236"
 channel = "cn_online"
 platform = "ios"
@@ -22,7 +28,7 @@ timeout_secs = 600
 [crypto]
 # The ABCrypt manifest key/IV are not shipped with this tool. Extract them from a client you
 # legitimately own and set them here or via RIPPER_AB_KEY / RIPPER_AB_IV
-# (16-character strings or 32 hex digits).
+# (16-character strings or 32 hex digits). JP uses a single pair for its manifest and its API.
 # ab_key = ""
 # ab_iv = ""
 

@@ -1,17 +1,30 @@
-//! Anonymous HTTPS client for the CN CDN.
+//! HTTPS client for the asset CDN: anonymous for CN; for JP, every request carries the signed
+//! cookie of a guest login (see [`crate::jp`]), made once per client on first use.
 //!
 //! Transient failures (connect/timeout errors, 5xx, short bodies) are retried with exponential
 //! backoff, moving to the next equivalent host each time. A 404 is not retried: on this CDN it
 //! means the `downloadPath` or app version in the URL is wrong, and another host will say the same.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::StatusCode;
+use tokio::sync::OnceCell;
 
-use crate::config::CdnConfig;
+use crate::config::{CdnConfig, Region};
+use crate::jp::{self, JpError, Session};
 use crate::manifest::{self, BundleEntry, ManifestError, ManifestKey};
 use crate::obfuscation::deobfuscate;
+
+/// An asset version as the server names it, with the JP asset hash that goes with it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetVersion {
+    /// CN `N` of `ios{N}`; JP e.g. `6.8.0.50`.
+    pub version: String,
+    /// JP only.
+    pub hash: Option<String>,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum CdnError {
@@ -33,6 +46,12 @@ pub enum CdnError {
         "no ABCrypt key configured; set RIPPER_AB_KEY/RIPPER_AB_IV or [crypto] in the config (D4)"
     )]
     MissingKey,
+    #[error("JP login: {0}")]
+    Jp(#[from] JpError),
+    #[error("JP needs an account file (the client was built without one)")]
+    NoAccountFile,
+    #[error("JP asset version {0} has no asset hash; pin cdn.jp.asset_hash or omit the version")]
+    MissingAssetHash(String),
     #[error(transparent)]
     Manifest(#[from] ManifestError),
     #[error("TLS setup failed: {0}")]
@@ -57,6 +76,9 @@ pub struct CdnClient {
     http: reqwest::Client,
     config: CdnConfig,
     key: Option<ManifestKey>,
+    /// JP guest account (created on first login).
+    account_file: Option<PathBuf>,
+    session: OnceCell<Session>,
 }
 
 fn tls_config() -> Result<rustls::ClientConfig, CdnError> {
@@ -71,7 +93,7 @@ fn tls_config() -> Result<rustls::ClientConfig, CdnError> {
 
 impl CdnClient {
     pub fn new(config: CdnConfig, key: Option<ManifestKey>) -> Result<Self, CdnError> {
-        if config.hosts.is_empty() {
+        if config.region == Region::Cn && config.hosts.is_empty() {
             return Err(CdnError::NoHosts);
         }
         let mut headers = reqwest::header::HeaderMap::new();
@@ -88,24 +110,74 @@ impl CdnClient {
                 url: "<client>".into(),
                 source,
             })?;
-        Ok(Self { http, config, key })
+        Ok(Self {
+            http,
+            config,
+            key,
+            account_file: None,
+            session: OnceCell::new(),
+        })
+    }
+
+    /// Where the JP guest account is kept (required for JP).
+    pub fn with_account_file(mut self, path: impl Into<PathBuf>) -> Self {
+        self.account_file = Some(path.into());
+        self
     }
 
     pub fn config(&self) -> &CdnConfig {
         &self.config
     }
 
+    /// The JP login, made on first use and shared by every later request.
+    pub async fn session(&self) -> Result<&Session, CdnError> {
+        self.session
+            .get_or_try_init(|| async {
+                let key = self.key.as_ref().ok_or(CdnError::MissingKey)?;
+                let account_file = self
+                    .account_file
+                    .as_deref()
+                    .ok_or(CdnError::NoAccountFile)?;
+                let login = jp::Login {
+                    http: &self.http,
+                    config: &self.config,
+                    key,
+                    account_file,
+                };
+                Ok(login.run().await?)
+            })
+            .await
+    }
+
+    /// Hosts and cookie for bundle downloads.
+    async fn bundle_hosts(&self) -> Result<(Vec<String>, Option<String>), CdnError> {
+        match self.config.region {
+            Region::Cn => Ok((self.config.hosts.clone(), None)),
+            Region::Jp => {
+                let session = self.session().await?;
+                Ok((
+                    vec![session.bundle_host.clone()],
+                    Some(session.cookie.clone()),
+                ))
+            }
+        }
+    }
+
     /// GETs a URL built for each host in turn, retrying transient failures.
     async fn get(
         &self,
+        hosts: &[String],
+        cookie: Option<&str>,
         url_for: impl Fn(&str) -> String,
         expected_len: Option<u64>,
     ) -> Result<Vec<u8>, CdnError> {
-        let hosts = &self.config.hosts;
+        if hosts.is_empty() {
+            return Err(CdnError::NoHosts);
+        }
         let mut attempt = 0u32;
         loop {
             let url = url_for(&hosts[attempt as usize % hosts.len()]);
-            let result = self.get_once(&url, expected_len).await;
+            let result = self.get_once(&url, cookie, expected_len).await;
             match result {
                 Err(error) if error.is_transient() && attempt < self.config.retries => {
                     tokio::time::sleep(Duration::from_millis(500 << attempt.min(6))).await;
@@ -116,12 +188,21 @@ impl CdnClient {
         }
     }
 
-    async fn get_once(&self, url: &str, expected_len: Option<u64>) -> Result<Vec<u8>, CdnError> {
+    async fn get_once(
+        &self,
+        url: &str,
+        cookie: Option<&str>,
+        expected_len: Option<u64>,
+    ) -> Result<Vec<u8>, CdnError> {
         let http = |source| CdnError::Http {
             url: url.to_owned(),
             source,
         };
-        let response = self.http.get(url).send().await.map_err(http)?;
+        let mut request = self.http.get(url);
+        if let Some(cookie) = cookie {
+            request = request.header(reqwest::header::COOKIE, cookie);
+        }
+        let response = request.send().await.map_err(http)?;
         match response.status() {
             StatusCode::OK => {}
             StatusCode::NOT_FOUND => {
@@ -136,6 +217,8 @@ impl CdnClient {
                 });
             }
         }
+        // Without a manifest size, the transfer itself must at least be complete.
+        let expected_len = expected_len.or(response.content_length());
         let body = response.bytes().await.map_err(http)?;
         if let Some(expected) = expected_len
             && body.len() as u64 != expected
@@ -154,7 +237,7 @@ impl CdnClient {
     pub async fn get_url(&self, url: &str) -> Result<Vec<u8>, CdnError> {
         let mut attempt = 0u32;
         loop {
-            match self.get_once(url, None).await {
+            match self.get_once(url, None, None).await {
                 Err(error) if error.is_transient() && attempt < self.config.retries => {
                     tokio::time::sleep(Duration::from_millis(500 << attempt.min(6))).await;
                     attempt += 1;
@@ -164,43 +247,118 @@ impl CdnClient {
         }
     }
 
-    /// Current CDN asset version `N` (the `version` file), unless pinned in the config.
-    pub async fn asset_version(&self) -> Result<u32, CdnError> {
-        if let Some(version) = self.config.asset_version {
-            return Ok(version);
+    /// The current asset version, unless pinned in the config. CN reads the CDN `version` file;
+    /// JP logs in and takes `assetVersion`/`assetHash` from the auth response.
+    pub async fn asset_version(&self) -> Result<AssetVersion, CdnError> {
+        match self.config.region {
+            Region::Cn => self.cn_asset_version().await,
+            Region::Jp => {
+                if let Some(version) = &self.config.asset_version {
+                    let hash = self
+                        .config
+                        .jp
+                        .asset_hash
+                        .clone()
+                        .ok_or_else(|| CdnError::MissingAssetHash(version.clone()))?;
+                    return Ok(AssetVersion {
+                        version: version.clone(),
+                        hash: Some(hash),
+                    });
+                }
+                let session = self.session().await?;
+                Ok(AssetVersion {
+                    version: session.asset_version.clone(),
+                    hash: Some(session.asset_hash.clone()),
+                })
+            }
+        }
+    }
+
+    async fn cn_asset_version(&self) -> Result<AssetVersion, CdnError> {
+        if let Some(version) = &self.config.asset_version {
+            return Ok(AssetVersion {
+                version: version.clone(),
+                hash: None,
+            });
         }
         let buster = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or_default();
         let body = self
-            .get(|host| self.config.version_url(host, buster), None)
+            .get(
+                &self.config.hosts,
+                None,
+                |host| self.config.version_url(host, buster),
+                None,
+            )
             .await?;
         let text = String::from_utf8_lossy(&body).trim().to_owned();
-        text.parse().map_err(|_| CdnError::VersionFormat {
-            url: self.config.version_url(&self.config.hosts[0], buster),
-            body: text,
-        })
+        match text.parse::<u32>() {
+            Ok(version) => Ok(AssetVersion {
+                version: version.to_string(),
+                hash: None,
+            }),
+            Err(_) => Err(CdnError::VersionFormat {
+                url: self.config.version_url(&self.config.hosts[0], buster),
+                body: text,
+            }),
+        }
     }
 
-    /// Downloads and decrypts `ios{N}/AssetBundleInfoNew.json`, returning the msgpack plaintext.
-    pub async fn manifest_plain(&self, asset_version: u32) -> Result<Vec<u8>, CdnError> {
+    /// Downloads and decrypts the manifest (CN `ios{N}/AssetBundleInfoNew.json`, JP the
+    /// assetbundle-info API), returning the msgpack plaintext.
+    pub async fn manifest_plain(&self, asset: &AssetVersion) -> Result<Vec<u8>, CdnError> {
         let key = self.key.as_ref().ok_or(CdnError::MissingKey)?;
-        let ciphertext = self
-            .get(|host| self.config.manifest_url(host, asset_version), None)
-            .await?;
+        let ciphertext = match self.config.region {
+            Region::Cn => {
+                self.get(
+                    &self.config.hosts,
+                    None,
+                    |host| self.config.manifest_url(host, &asset.version),
+                    None,
+                )
+                .await?
+            }
+            Region::Jp => {
+                let hash = asset
+                    .hash
+                    .as_deref()
+                    .ok_or_else(|| CdnError::MissingAssetHash(asset.version.clone()))?;
+                let session = self.session().await?;
+                self.get(
+                    std::slice::from_ref(&session.info_host),
+                    Some(&session.cookie),
+                    |host| self.config.jp_manifest_url(host, &asset.version, hash),
+                    None,
+                )
+                .await?
+            }
+        };
         Ok(manifest::decrypt(&ciphertext, key)?)
     }
 
     /// Downloads one bundle from its own `downloadPath` and returns the deobfuscated UnityFS.
+    ///
+    /// CN bundles must be exactly `fileSize + 4` bytes. JP bundles are only checked against their
+    /// `Content-Length`: the JP CDN serves some bundles that differ from their manifest entry, and
+    /// the game accepts them as they are (`AssetBundleDownloadHandler` uses `fileSize` only to
+    /// size its buffer and checks neither size nor CRC), so they are the assets the game shows.
     pub async fn bundle(&self, entry: &BundleEntry) -> Result<Vec<u8>, CdnError> {
+        let (hosts, cookie) = self.bundle_hosts().await?;
+        let expected = match self.config.region {
+            Region::Cn => Some(entry.file_size + 4),
+            Region::Jp => None,
+        };
         let raw = self
             .get(
+                &hosts,
+                cookie.as_deref(),
                 |host| {
                     self.config
                         .bundle_url(host, &entry.download_path, &entry.bundle_name)
                 },
-                Some(entry.file_size + 4),
+                expected,
             )
             .await?;
         Ok(deobfuscate(raw))
@@ -303,7 +461,7 @@ pub(crate) mod tests {
         ]);
         let (host, _) = serve(routes).await;
         let client = CdnClient::new(config_for(vec![host]), None).unwrap();
-        assert_eq!(client.asset_version().await.unwrap(), 10);
+        assert_eq!(client.asset_version().await.unwrap().version, "10");
         assert_eq!(
             client
                 .bundle(&entry("a/b", plain.len() as u64))
@@ -350,8 +508,12 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn manifest_requires_a_user_supplied_key() {
         let client = CdnClient::new(config_for(vec!["http://127.0.0.1:9".into()]), None).unwrap();
+        let asset = AssetVersion {
+            version: "10".into(),
+            hash: None,
+        };
         assert!(matches!(
-            client.manifest_plain(10).await,
+            client.manifest_plain(&asset).await,
             Err(CdnError::MissingKey)
         ));
     }

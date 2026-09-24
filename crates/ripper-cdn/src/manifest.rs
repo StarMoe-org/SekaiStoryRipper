@@ -90,9 +90,12 @@ pub struct BundleEntry {
     pub file_size: u64,
     #[serde(default)]
     pub dependencies: Vec<String>,
-    /// CDN directory holding this bundle (`ios1`, `ios10`, ...).
+    /// CDN directory holding this bundle (CN `ios1`, `ios10`, ...). The JP manifest has no such
+    /// field; the store fills in `{assetVersion}/{assetHash}/{platform}` on load.
+    #[serde(default)]
     pub download_path: String,
-    /// CRC32 of the concatenated, decompressed bundle entries (verified in M0, see docs/spike/M0-report.md).
+    /// CRC32 of the concatenated, decompressed bundle entries (verified in M0, see docs/spike/M0-report.md;
+    /// the JP manifest's `crc` has the same meaning).
     pub crc: u32,
 }
 
@@ -103,6 +106,13 @@ pub fn decrypt(ciphertext: &[u8], key: &ManifestKey) -> Result<Vec<u8>, Manifest
         .map_err(|_| ManifestError::Decrypt)
 }
 
+/// The same envelope in the other direction (JP API request bodies).
+pub(crate) fn encrypt(plain: &[u8], key: &ManifestKey) -> Vec<u8> {
+    use aes::cipher::BlockModeEncrypt;
+    cbc::Encryptor::<aes::Aes128>::new(&key.key.into(), &key.iv.into())
+        .encrypt_padded_vec::<Pkcs7>(plain)
+}
+
 impl Manifest {
     pub fn decrypt(ciphertext: &[u8], key: &ManifestKey) -> Result<Self, ManifestError> {
         Self::from_msgpack(&decrypt(ciphertext, key)?)
@@ -110,6 +120,15 @@ impl Manifest {
 
     pub fn from_msgpack(plain: &[u8]) -> Result<Self, ManifestError> {
         Ok(rmp_serde::from_slice(plain)?)
+    }
+
+    /// Gives every entry without a `downloadPath` (all of a JP manifest) the given one.
+    pub fn fill_download_path(&mut self, download_path: &str) {
+        for entry in self.bundles.values_mut() {
+            if entry.download_path.is_empty() {
+                entry.download_path = download_path.to_owned();
+            }
+        }
     }
 }
 
