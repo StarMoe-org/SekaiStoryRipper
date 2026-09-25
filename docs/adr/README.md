@@ -16,5 +16,6 @@
 | [0009](0009-missing-assets-and-masterdata.md) | 缺失资产的处理与 masterdata 来源 | accepted |
 | [0010](0010-cross-platform.md) | 跨平台构建 | accepted |
 | [0011](0011-regions.md) | 区服：CN 匿名 CDN 与日服游客登录 | accepted |
+| [0012](0012-s3-output.md) | S3 作为输出存储 | accepted |
 
 模板见 [`0000-template.md`](0000-template.md)。

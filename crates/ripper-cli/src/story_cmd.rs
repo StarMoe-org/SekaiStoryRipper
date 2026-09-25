@@ -512,11 +512,14 @@ pub async fn run_rip(config: &Config, args: Args) -> Result<()> {
             }
         }
     }
+    let destination = match &config.remote {
+        Some(remote) => format!("{}/episodes (after publishing)", remote.location()),
+        None => config.paths.out.join("episodes").display().to_string(),
+    };
     println!(
-        "{} of {} episodes exported -> {}",
+        "{} of {} episodes exported -> {destination}",
         written.len(),
         planned.len(),
-        config.paths.out.join("episodes").display()
     );
     println!(
         "warnings: {}",

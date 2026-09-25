@@ -29,15 +29,19 @@ png = "0.18"
 rayon = "1"
 reqwest = { version = "0.13", default-features = false, features = ["http2", "rustls-no-provider", "system-proxy"] }
 rmp-serde = "1"
+# S3 request signing only (SigV4, sans-IO); HTTP stays on reqwest + rustls/ring.
+rusty-s3 = { version = "0.10", default-features = false, features = ["rustcrypto"] }
 # TLS: rustls with the `ring` provider and bundled webpki roots. No aws-lc/OpenSSL, so the only
 # C code in the tree stays zstd-sys and every platform (incl. musl) trusts the same roots.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.11"
 tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "net"] }
 toml = "0.9"
+url = "2"
 unity-rs-core = "0.5.1"
 webpki-roots = "1"
 zstd = "0.13"

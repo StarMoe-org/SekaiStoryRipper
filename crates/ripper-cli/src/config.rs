@@ -9,6 +9,9 @@ use anyhow::{Context, Result};
 use ripper_cdn::{BundleCache, CdnClient, CdnConfig, ManifestKey, Region};
 use serde::{Deserialize, Serialize};
 
+use crate::remote_out::RemoteOut;
+use crate::s3::{S3Config, S3Location};
+
 pub const DEFAULT_CONFIG_FILE: &str = "ripper.toml";
 pub const ENV_AB_KEY: &str = "RIPPER_AB_KEY";
 pub const ENV_AB_IV: &str = "RIPPER_AB_IV";
@@ -22,6 +25,10 @@ pub struct Config {
     pub paths: PathsConfig,
     pub unity: UnityConfig,
     pub tools: ToolsConfig,
+    pub s3: S3Config,
+    /// Set when `paths.out` is an `s3://` URL; `paths.out` then points at its staging directory.
+    #[serde(skip)]
+    pub remote: Option<std::sync::Arc<RemoteOut>>,
 }
 
 /// ABCrypt key/IV for the manifest (ADR-0005: never shipped, always user-supplied).
@@ -151,7 +158,22 @@ impl Config {
             paths: PathsConfig::preset(region),
             unity: UnityConfig::preset(region),
             tools: ToolsConfig::default(),
+            s3: S3Config::default(),
+            remote: None,
         }
+    }
+
+    /// When `paths.out` is `s3://bucket/prefix`, sets up the remote output and points
+    /// `paths.out` at its local staging directory (ADR-0012).
+    pub fn attach_remote(&mut self) -> Result<()> {
+        let out = self.paths.out.to_string_lossy().into_owned();
+        let Some(location) = S3Location::parse(&out) else {
+            return Ok(());
+        };
+        let remote = RemoteOut::new(location?, &self.s3, &self.paths.cache)?;
+        self.paths.out = remote.staging().to_path_buf();
+        self.remote = Some(std::sync::Arc::new(remote));
+        Ok(())
     }
 
     /// Loads `path`, or `ripper.toml` in the working directory when present, over the region's
@@ -256,6 +278,8 @@ mod tests {
             defaults.masterdata.url_template
         );
         assert_eq!(example.unity.version, defaults.unity.version);
+        assert_eq!(example.s3.concurrency, defaults.s3.concurrency);
+        assert!(example.s3.endpoint.is_none() && example.s3.region.is_none());
         assert!(
             example.crypto.ab_key.is_none(),
             "the example must not carry a key"

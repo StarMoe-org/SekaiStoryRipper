@@ -516,6 +516,17 @@ pub fn read_record(dir: &Path) -> Option<UnpackRecord> {
 /// True when `dir` holds a complete unpack of this exact bundle content in the current format and
 /// none of its unresolved bindings could now be named.
 pub fn is_up_to_date(dir: &Path, crc: u32, names: &BindingNames) -> bool {
+    is_up_to_date_with(dir, crc, names, |relative| path_in(dir, relative).exists())
+}
+
+/// [`is_up_to_date`] with the file check supplied: `present` gets each recorded file's path
+/// relative to `dir` (e.g. to accept files that only exist in remote storage).
+pub fn is_up_to_date_with(
+    dir: &Path,
+    crc: u32,
+    names: &BindingNames,
+    present: impl Fn(&str) -> bool,
+) -> bool {
     read_record(dir).is_some_and(|r| {
         r.version == unpack::VERSION
             && r.crc == crc
@@ -523,11 +534,7 @@ pub fn is_up_to_date(dir: &Path, crc: u32, names: &BindingNames) -> bool {
                 .unresolved_bindings
                 .iter()
                 .any(|&hash| names.is_known(hash))
-            && r.files.iter().all(|f| {
-                let mut path = dir.to_path_buf();
-                path.extend(f.path.split('/'));
-                path.exists()
-            })
+            && r.files.iter().all(|f| present(&f.path))
     })
 }
 
