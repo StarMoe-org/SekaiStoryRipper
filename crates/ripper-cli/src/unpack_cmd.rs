@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 use ripper_cdn::{BundleCache, BundleEntry};
 use ripper_convert::motion::BindingNames;
-use ripper_convert::unpack::{UnpackOptions, is_up_to_date, moc3_ids, unpack_bundle};
+use ripper_convert::unpack::{UnpackOptions, is_up_to_date_with, moc3_ids, unpack_bundle};
 use ripper_unity::{BundleSource, UnityRsBundle};
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +33,9 @@ struct KnownIds {
 }
 
 impl KnownIds {
+    /// Relative to the library root.
+    const RELATIVE: &'static str = "_index/live2d-ids.json";
+
     fn path(library: &Path) -> PathBuf {
         library.join("_index").join("live2d-ids.json")
     }
@@ -131,6 +134,21 @@ pub async fn unpack_entries(
     let cache = config.bundle_cache();
     let unity = config.unity.version.clone();
 
+    // With an S3 output, bundles unpacked on another machine count as done (ADR-0012).
+    if let Some(remote) = &config.remote {
+        remote
+            .hydrate_file(&format!("library/{}", KnownIds::RELATIVE))
+            .await?;
+        if !force {
+            let names: Vec<String> = entries.iter().map(|e| e.bundle_name.clone()).collect();
+            let hydrated = remote.hydrate_bundles(&names).await?;
+            if hydrated > 0 && verbose {
+                println!("{hydrated} bundle(s) already in {}", remote.location());
+            }
+        }
+    }
+    let remote = config.remote.clone();
+
     // Models first, so clips in this batch can name every parameter of the models alongside them.
     let mut known = KnownIds::load(&library)?;
     for entry in entries
@@ -162,7 +180,15 @@ pub async fn unpack_entries(
             .par_iter()
             .map(|entry| {
                 let dir = bundle_dir(&library, &entry.bundle_name);
-                if !force && is_up_to_date(&dir, entry.crc, &names) {
+                let present = |relative: &str| {
+                    let mut path = dir.clone();
+                    path.extend(relative.split('/'));
+                    path.exists()
+                        || remote.as_ref().is_some_and(|r| {
+                            r.has(&format!("library/{}/{relative}", entry.bundle_name))
+                        })
+                };
+                if !force && is_up_to_date_with(&dir, entry.crc, &names, present) {
                     return (entry.bundle_name.clone(), Outcome::UpToDate);
                 }
                 let result = open(&cache, entry, &unity).and_then(|bundle| {

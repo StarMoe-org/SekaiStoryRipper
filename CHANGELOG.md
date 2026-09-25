@@ -1,5 +1,11 @@
 # Changelog
 
+## 未发布
+
+### 新增
+
+- **输出到 S3**：`--out s3://bucket/prefix`（或 `paths.out`）把 library、episode 索引和 lock 发布到 AWS S3 或兼容服务（MinIO、R2 等）。先写本地暂存再增量上传（台账记录 SHA-256，未变化不重传）；暂存为空时从 S3 回填 record 与 JSON，已发布的 bundle 不会重复解包。新增配置段 `[s3]`（endpoint / region / addressing_style / concurrency），凭据只从 `AWS_*` 环境变量读取。见 ADR-0012。
+
 ## 0.2.0（2026-09-25）
 
 ### 日服（JP 6.8.1）

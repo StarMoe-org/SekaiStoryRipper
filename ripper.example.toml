@@ -37,7 +37,16 @@ url_template = "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-sc-ma
 
 [paths]
 cache = "cache"
+# A directory, or s3://bucket/prefix to publish the library to S3 (see [s3]; ADR-0012).
 out = "out"
+
+[s3]
+# Used when paths.out (or --out) is s3://bucket/prefix. Credentials come only from the environment:
+# AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (and AWS_SESSION_TOKEN when needed).
+# endpoint = "https://<account>.r2.cloudflarestorage.com"   # unset: AWS, or AWS_ENDPOINT_URL(_S3)
+# region = "auto"                                            # unset: AWS_REGION, else us-east-1
+# addressing_style = "auto"                                  # auto | path | virtual
+concurrency = 16
 
 [unity]
 version = "2022.3.62f3"

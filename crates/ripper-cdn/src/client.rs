@@ -81,7 +81,9 @@ pub struct CdnClient {
     session: OnceCell<Session>,
 }
 
-fn tls_config() -> Result<rustls::ClientConfig, CdnError> {
+/// rustls with the `ring` provider and the bundled webpki roots (ADR-0010); shared by every
+/// HTTP client the tool builds.
+pub fn tls_config() -> Result<rustls::ClientConfig, CdnError> {
     let roots = rustls::RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
     };

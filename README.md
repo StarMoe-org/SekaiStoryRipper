@@ -108,6 +108,22 @@ ripper unpack --keep-astc scenario/background/bg_a000001                       #
 缓存布局：清单在 `cache/manifests/<app>/ios<N>.msgpack.zst`，bundle 在 `cache/bundles/<bundleName>.<crc>`（已反混淆的 UnityFS）。
 每个 bundle 下载后先校验，通过后才原子写入缓存：CN 校验长度（等于 `fileSize + 4`）和 CRC（对解压后的条目计算，与清单比对）；日服校验 `Content-Length` 和能否解压（见 [ADR-0011](docs/adr/0011-regions.md)）。
 
+## 输出到 S3
+
+`--out` 可以直接写成对象存储地址（AWS S3，或 MinIO、Cloudflare R2 等兼容服务）：
+
+```bash
+export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...
+export AWS_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com   # 非 AWS 时设置；AWS 用 AWS_REGION
+ripper --out s3://my-bucket/sekai/cn rip unit:school-refusal-story-chapter/1
+```
+
+- 先解包到本地暂存 `<cache>/s3-out/<bucket>/<prefix>`，结束后只上传新增或变化的文件。暂存目录可以随时删除。
+- 暂存为空时（例如换了一台机器），会从 S3 取回已有 bundle 的 record 和 JSON，已发布的内容不会重复解包、重复上传。
+- 端点、区域、寻址方式可写在配置的 `[s3]` 段（见 `ripper.example.toml`）；凭据只从环境变量读取。设计见 [ADR-0012](docs/adr/0012-s3-output.md)。
+
+SekaiStoryExporter 可以直接读取这个地址：`sse --library s3://my-bucket/sekai/cn …`。
+
 ## 支持平台
 
 macOS arm64、Windows x64、Linux x64、Linux arm64（Linux 为 musl 静态链接）。每个平台都在原生 runner 上构建和测试，GitHub Actions 和 Gitea Actions 各有一份配置（[ADR-0010](docs/adr/0010-cross-platform.md)）。
@@ -152,6 +168,8 @@ stories (CN 6.4.0 and JP 6.8.1, iOS) into a lossless, versioned intermediate for
   guest account (kept in `cache/jp/account.json`) to obtain the CDN cookie. Pass `--region jp`.
 - **No keys and no game assets are shipped.** Supply the AES key/IV from a client you own via
   `RIPPER_AB_KEY` / `RIPPER_AB_IV`.
+- `--out s3://bucket/prefix` publishes the output to S3 or an S3-compatible store (MinIO, R2, ...),
+  uploading only what changed; credentials come from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
 - Builds natively on macOS arm64, Windows x64 and Linux x64/arm64 (musl).
 - Not affiliated with SEGA, Colorful Palette or Craft Egg. Licensed under MIT OR Apache-2.0.
 

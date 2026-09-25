@@ -3,6 +3,8 @@ mod config;
 mod fetch_cmd;
 mod manifest_cmd;
 mod masterdata_cmd;
+mod remote_out;
+mod s3;
 mod story_cmd;
 mod unpack_cmd;
 
@@ -29,7 +31,8 @@ struct Cli {
     /// Override paths.cache.
     #[arg(long, global = true)]
     cache: Option<PathBuf>,
-    /// Override paths.out.
+    /// Override paths.out: a directory, or s3://bucket/prefix to publish to S3 (see [s3] in
+    /// ripper.example.toml; credentials from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY).
     #[arg(long, global = true)]
     out: Option<PathBuf>,
     #[command(subcommand)]
@@ -147,7 +150,29 @@ async fn main() -> anyhow::Result<()> {
     if let Some(out) = cli.out {
         config.paths.out = out;
     }
-    match cli.command {
+    config.attach_remote()?;
+    let writes_out = matches!(
+        cli.command,
+        Command::Plan { .. } | Command::Rip { .. } | Command::Unpack { .. }
+    );
+    let result = run(&config, cli.command).await;
+    if let (Some(remote), true) = (&config.remote, writes_out) {
+        // Publish what was written even when the command failed part-way: every bundle that
+        // made it to staging is complete (its record is written last).
+        eprintln!("publishing to {} ...", remote.location());
+        let summary = remote.publish().await?;
+        eprintln!(
+            "published: {} uploaded ({:.1} MB), {} unchanged",
+            summary.uploaded,
+            summary.bytes as f64 / 1e6,
+            summary.unchanged
+        );
+    }
+    result
+}
+
+async fn run(config: &Config, command: Command) -> anyhow::Result<()> {
+    match command {
         Command::Manifest {
             asset_version,
             from_file,
@@ -155,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
             diff_out,
         } => {
             manifest_cmd::run(
-                &config,
+                config,
                 manifest_cmd::Args {
                     asset_version,
                     from_file,
@@ -173,7 +198,7 @@ async fn main() -> anyhow::Result<()> {
             no_verify,
         } => {
             fetch_cmd::run(
-                &config,
+                config,
                 fetch_cmd::Args {
                     names,
                     prefixes,
@@ -198,7 +223,7 @@ async fn main() -> anyhow::Result<()> {
                 force: false,
                 keep_astc: false,
             };
-            story_cmd::run_plan(&config, args).await
+            story_cmd::run_plan(config, args).await
         }
         Command::Rip {
             selectors,
@@ -216,9 +241,9 @@ async fn main() -> anyhow::Result<()> {
                 force,
                 keep_astc,
             };
-            story_cmd::run_rip(&config, args).await
+            story_cmd::run_rip(config, args).await
         }
-        Command::Masterdata { refresh } => masterdata_cmd::run(&config, refresh).await,
+        Command::Masterdata { refresh } => masterdata_cmd::run(config, refresh).await,
         Command::Unpack {
             names,
             prefixes,
@@ -228,7 +253,7 @@ async fn main() -> anyhow::Result<()> {
             keep_astc,
         } => {
             unpack_cmd::run(
-                &config,
+                config,
                 unpack_cmd::Args {
                     names,
                     prefixes,
