@@ -1,6 +1,6 @@
 //! `ripper masterdata`: fetch the masterdata tables the resolver needs into `<cache>/masterdata/`.
 //!
-//! The source is the configurable `masterdata.url_template` (decision D15). Tables are cached as
+//! The source is the configurable `masterdata.url_template` (ADR-0009). Tables are cached as
 //! fetched; `meta.json` records where and when, so a plan can say which masterdata it used.
 
 use std::path::{Path, PathBuf};

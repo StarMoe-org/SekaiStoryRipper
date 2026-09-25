@@ -1,6 +1,6 @@
 //! `AssetBundleInfoNew.json`: AES-128-CBC (ABCrypt) + PKCS#7, then msgpack.
 //!
-//! The ABCrypt key and IV are never shipped with this tool (decision D4); callers supply them.
+//! The ABCrypt key and IV are never shipped with this tool (ADR-0005); callers supply them.
 
 use std::collections::BTreeMap;
 
@@ -94,8 +94,8 @@ pub struct BundleEntry {
     /// field; the store fills in `{assetVersion}/{assetHash}/{platform}` on load.
     #[serde(default)]
     pub download_path: String,
-    /// CRC32 of the concatenated, decompressed bundle entries (verified in M0, see docs/spike/M0-report.md;
-    /// the JP manifest's `crc` has the same meaning).
+    /// CRC32 of the concatenated, decompressed bundle entries (the JP manifest's `crc` has the
+    /// same meaning).
     pub crc: u32,
 }
 

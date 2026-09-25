@@ -1,22 +1,57 @@
 # SekaiStoryRipper
 
-为 **Project Sekai（CN 服 6.4.0 / 日服 6.8.1，iOS）** 的剧情回放抓取并解包所需资产的独立工具。
-下游消费者是 [SekaiStoryExporter](https://github.com/StarMoe-org/SekaiStoryExporter)（sse）。
+[![CI](https://github.com/StarMoe-org/SekaiStoryRipper/actions/workflows/ci.yml/badge.svg)](https://github.com/StarMoe-org/SekaiStoryRipper/actions/workflows/ci.yml)
 
-> 状态：**v0.1.0**：可以按剧集导出剧情回放所需的全部资源（主线、活动、卡面、特别篇）。M0 结论见 [`docs/spike/M0-report.md`](docs/spike/M0-report.md)。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
+为 **Project Sekai**（CN 服 6.4.0 / 日服 6.8.1，iOS）的剧情回放下载并解包所需资源的命令行工具。
+下游是 [SekaiStoryExporter](https://github.com/StarMoe-org/SekaiStoryExporter)（sse），它把这些资源渲染成视频。
+
+> English summary at the [end of this page](#english-summary).
 
 ## 做什么
 
-1. 从 CN CDN 匿名拉取、或以日服游客账号登录后拉取 AssetBundle，完成反混淆、校验和缓存；
+1. 从 CN CDN 匿名下载、或以日服游客账号登录后下载 AssetBundle，完成反混淆、校验和缓存；
 2. 根据 masterdata 和剧本，反推出某一话需要哪些 bundle；
-3. 把 bundle 解成 sse 可以直接消费的**无损、版本化**中间格式。动作（AnimationClip）保留 StreamedClip 的原始多项式系数，**不转成 motion3**。
+3. 把 bundle 解成 sse 可以直接读取的**无损、版本化**中间格式。动作（AnimationClip）保留 StreamedClip 的原始多项式系数，**不转成 motion3**。
+
+CN 与日服的支持程度相同：主线、活动、卡面、特别篇都可以导出。
+
+## 快速上手
+
+**1. 安装。** 从 [Releases](https://github.com/StarMoe-org/SekaiStoryRipper/releases) 下载对应平台的 `ripper`，或者从源码构建（Rust 版本由 `rust-toolchain.toml` 固定）：
+
+```bash
+cargo build --release -p ripper-cli     # 产物在 target/release/ripper
+```
+
+**2. 提供密钥。** 清单（日服还包括 API）的 AES key/IV 不随本工具分发，需要你从自己合法持有的客户端取得：
+
+```bash
+export RIPPER_AB_KEY=...  RIPPER_AB_IV=...   # 16 个字符，或 32 位十六进制
+```
+
+**3. 导出一话。**
+
+```bash
+ripper manifest                                        # 拉取并归档清单（游戏每次热更后运行一次）
+ripper rip unit:school-refusal-story-chapter/1         # 下载并解包第 1 章第 1 话需要的全部资源
+
+# 日服：加 --region jp。首次运行会注册一个游客账号，保存在 cache/jp/account.json 后复用
+ripper --region jp manifest
+ripper --region jp rip event:185/1
+```
+
+结果在 `out/`（日服 `out/jp/`）：`library/` 是解包后的资源，`episodes/` 是每一话的索引。把这个目录交给 sse 即可：
+
+```bash
+sse --library out export unit:school-refusal-story-chapter/1 -o ep1.mp4 --ui <ui-dir>
+```
 
 ## 用法
 
 最常用的是 `rip`：按剧集选择器导出一话需要的全部资源。
 
 ```bash
-export RIPPER_AB_KEY=...  RIPPER_AB_IV=...   # 清单解密 key，需自行从合法持有的客户端取得（D4）
+export RIPPER_AB_KEY=...  RIPPER_AB_IV=...   # 清单解密 key，需自行从合法持有的客户端取得（[ADR-0005](docs/adr/0005-keys-and-assets.md)）
 ripper manifest                              # 拉取并归档清单（每次游戏热更后运行一次）
 ripper rip unit:school-refusal-story-chapter/1 event:120 card:1 special:2
 ripper rip unit:all --report rip-report.json
@@ -42,7 +77,7 @@ ripper --region jp rip unit:school-refusal-story-chapter/1
 
 ```bash
 cp ripper.example.toml ripper.toml        # 按需修改；ripper.toml 已被 git 忽略
-export RIPPER_AB_KEY=...  RIPPER_AB_IV=... # 清单解密 key，需自行从合法持有的客户端取得（D4）
+export RIPPER_AB_KEY=...  RIPPER_AB_IV=... # 清单解密 key，需自行从合法持有的客户端取得（[ADR-0005](docs/adr/0005-keys-and-assets.md)）
 
 ripper manifest                           # 读 CDN 版本号 → 拉取并解密清单 → 归档 → 与上一版 diff
 ripper manifest --diff-out diff.json      # 同时把 diff 写成 JSON
@@ -71,36 +106,32 @@ ripper unpack --keep-astc scenario/background/bg_a000001                       #
 每个 bundle 目录里的 `_ripper.json` 记录了文件清单和来源 crc。
 
 缓存布局：清单在 `cache/manifests/<app>/ios<N>.msgpack.zst`，bundle 在 `cache/bundles/<bundleName>.<crc>`（已反混淆的 UnityFS）。
-每个 bundle 下载后都会校验长度（等于 `fileSize + 4`）和 CRC（对解压后的条目计算，与清单比对），通过后才原子写入缓存。
+每个 bundle 下载后先校验，通过后才原子写入缓存：CN 校验长度（等于 `fileSize + 4`）和 CRC（对解压后的条目计算，与清单比对）；日服校验 `Content-Length` 和能否解压（见 [ADR-0011](docs/adr/0011-regions.md)）。
 
 ## 支持平台
 
-macOS arm64、Windows x64、Linux x64、Linux arm64（Linux 为 musl 静态链接）。每个平台都在原生 CI runner 上构建和测试（`.gitea/workflows/ci.yml`）。
+macOS arm64、Windows x64、Linux x64、Linux arm64（Linux 为 musl 静态链接）。每个平台都在原生 runner 上构建和测试，GitHub Actions 和 Gitea Actions 各有一份配置（[ADR-0010](docs/adr/0010-cross-platform.md)）。
 
-## 计划中的结构
+## 项目结构
 
 Rust（edition 2024）多 crate workspace：
 
 | crate | 职责 |
 |---|---|
-| `ripper-cdn` | 版本号、清单解密、下载、反混淆、缓存 |
+| `ripper-cdn` | 版本号、登录（日服）、清单解密、下载、反混淆、缓存 |
 | `ripper-unity` | UnityFS / SerializedFile / typetree 读取（基于 unity-rs-core，放在 trait 后面） |
 | `ripper-convert` | Texture2D→PNG、AnimationClip→sse-motion、ACB→WAV、USM 解复用 |
 | `ripper-resolve` | masterdata 加剧本得到 BundlePlan |
-| `ripper-format` | 输出格式的 serde 类型与 schema 版本，供 sse 依赖 |
+| `ripper-format` | 输出格式的 serde 类型与格式版本，供 sse 依赖 |
 | `ripper-cli` | 命令行 |
 
-`tools/oracle/` 放 UnityPy 交叉验证脚本。
+`tools/oracle/library/` 是用 UnityPy 交叉验证解包结果的脚本。架构决策见 [`docs/adr/`](docs/adr/)，版本变化见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 法律与分发边界
 
-- **本仓库和 release 不包含、也不分发任何游戏资产或派生资产。** 测试只使用本地缓存，仓库里只放哈希和统计值作为期望值。
-- **清单解密 key（ABCrypt）不在代码里。** 需要用户从自己合法持有的客户端取得，通过配置文件或环境变量提供。
-- 与游戏相关的商标和版权归各自权利人所有。本工具仅供个人研究与复刻使用。使用者须自行遵守游戏服务条款和所在地法律。
-
-## 逆向工单
-
-- [`docs/reverse/RE-R01-motion-bundle-mapping.md`](docs/reverse/RE-R01-motion-bundle-mapping.md)：Live2D 模型到动作包的映射规则（对应决策 D10）。**已完成**，结论见 [`docs/reverse/cn-6.4.0/live2d-bundle-resolution.md`](docs/reverse/cn-6.4.0/live2d-bundle-resolution.md)
+- **本仓库和 release 不包含、也不分发任何游戏资产或派生资产。** 测试只使用合成数据或本地缓存，仓库里只放哈希和统计值作为期望值。
+- **密钥不在代码里。** 需要用户从自己合法持有的客户端取得，通过配置文件或环境变量提供。
+- 本项目与 SEGA、Colorful Palette 及 Craft Egg 没有任何关联。与游戏相关的商标和版权归各自权利人所有。本工具仅供个人研究使用，使用者须自行遵守游戏服务条款和所在地法律。
 
 ## 许可证
 
@@ -108,3 +139,21 @@ Rust（edition 2024）多 crate workspace：
 
 - Apache License 2.0（[LICENSE-APACHE](LICENSE-APACHE)）
 - MIT License（[LICENSE-MIT](LICENSE-MIT)）
+
+## English summary
+
+**SekaiStoryRipper** (`ripper`) downloads and unpacks the assets needed to replay Project Sekai
+stories (CN 6.4.0 and JP 6.8.1, iOS) into a lossless, versioned intermediate format consumed by
+[SekaiStoryExporter](https://github.com/StarMoe-org/SekaiStoryExporter).
+
+- `ripper manifest` fetches and archives the asset manifest; `ripper rip <selector>` resolves an
+  episode to its bundles, downloads, verifies and unpacks them, and writes an episode index.
+- Both regions are supported at the same level. CN downloads anonymously; JP logs in once with a
+  guest account (kept in `cache/jp/account.json`) to obtain the CDN cookie. Pass `--region jp`.
+- **No keys and no game assets are shipped.** Supply the AES key/IV from a client you own via
+  `RIPPER_AB_KEY` / `RIPPER_AB_IV`.
+- Builds natively on macOS arm64, Windows x64 and Linux x64/arm64 (musl).
+- Not affiliated with SEGA, Colorful Palette or Craft Egg. Licensed under MIT OR Apache-2.0.
+
+Design decisions are recorded in [`docs/adr/`](docs/adr/) (in Chinese). Issues and pull requests
+are welcome in English or Chinese.

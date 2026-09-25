@@ -3,7 +3,7 @@
 //! Runs after the scenario was found (see [`scenario_bundle_candidates`]) and its references
 //! extracted, before anything else is downloaded. Every reference becomes bundle names by
 //! [`crate::rules`] and [`crate::live2d`]; names the manifest does not have are left out of
-//! [`Plan::bundles`] and reported as warnings (decision D14).
+//! [`Plan::bundles`] and reported as warnings (ADR-0009).
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::BuildHasher;

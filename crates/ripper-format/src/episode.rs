@@ -6,7 +6,7 @@
 //!
 //! The index is produced in two phases by `ripper-resolve`: the bundle plan (from masterdata, the
 //! scenario and the manifest) and the file lookup (from the unpack records). Anything that could
-//! not be resolved is listed in `warnings` instead of failing (decision D14).
+//! not be resolved is listed in `warnings` instead of failing (ADR-0009).
 
 use std::collections::BTreeMap;
 

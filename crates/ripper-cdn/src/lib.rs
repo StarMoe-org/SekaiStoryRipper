@@ -3,7 +3,7 @@
 //!
 //! CN is anonymous HTTPS GET (see `Sekai/ASSET_DOWNLOAD_GUIDE.md`); JP needs a guest login for its
 //! signed cookies (see [`jp`]). The only secret involved, the AES key of the manifest (and, for JP,
-//! of the API), is supplied by the user (decision D4).
+//! of the API), is supplied by the user (ADR-0005).
 
 pub mod cache;
 pub mod client;

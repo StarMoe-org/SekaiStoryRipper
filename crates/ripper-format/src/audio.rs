@@ -1,7 +1,7 @@
 //! `ripper-acb` v1: how an unpacked CRI ACB maps cue names to decoded waveforms.
 //!
 //! For `library/<bundle>/<x>.acb` the unpacker writes, next to the raw ACB (kept for block/AISAC
-//! semantics, decision D9):
+//! semantics, ADR-0007):
 //! - `<x>.cues.json`: this document;
 //! - `<x>.audio/<waveform>.wav`: every physical waveform once (decision: export per waveform, since
 //!   block BGMs have many cues/tracks sharing and reusing waveforms);

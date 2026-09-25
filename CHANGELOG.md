@@ -1,18 +1,28 @@
 # Changelog
 
-## 未发布
+## 0.2.0（2026-09-25）
 
 ### 日服（JP 6.8.1）
 
 - 新增 `--region jp`（或配置里的 `cdn.region = "jp"`）。区服决定整套默认值：CDN、masterdata（`haruki-sekai-master`）、Unity 版本（2022.3.62f2），以及独立的 `cache/jp`、`out/jp` 目录。配置文件叠加在区服预设之上，命令行的 `--region` 优先。
 - 日服 CDN 只认 CloudFront 签名 cookie。工具按游戏新装流程登录：版本 API → 注册游客账号（只注册一次，账号存在 `<cache>/account.json`）→ `PUT user/{id}/auth` → `POST api/signature` 取 cookie。版本号和 assetHash 取自登录响应。
-- 日服只有一对 AES key（`APIManager.Crypt`），同时用于 API 和清单，仍由用户通过 `RIPPER_AB_KEY` / `RIPPER_AB_IV` 提供（D4）。
+- 日服只有一对 AES key，同时用于 API 和清单，仍由用户通过 `RIPPER_AB_KEY` / `RIPPER_AB_IV` 提供。
 - 清单 URL 为 `…/api/version/{assetVersion}/{assetHash}/os/ios`，bundle URL 为 `{host}/{assetVersion}/{assetHash}/ios/{bundleName}`。日服清单没有 `downloadPath`，由清单库里的 `.meta.json`（记录 assetHash）在加载时补上。
-- 日服 CDN 上有少数 bundle 与清单里的 `fileSize`/`crc` 不一致（内容完整，只是另一版）。游戏自身不校验这两项（`AssetBundleDownloadHandler` 只拿 `fileSize` 定缓冲区），所以日服下载只校验 `Content-Length` 和能否解压，CRC 不符只打印提示，缓存也不按大小判定。
+- 日服 CDN 上有少数 bundle 与清单里的 `fileSize`/`crc` 不一致（内容完整，只是另一版）。游戏客户端本身不校验这两项，所以日服下载只校验 `Content-Length` 和能否解压，CRC 不符只打印提示，缓存也不按大小判定。
 
 ### 变更
 
 - asset version 改为字符串（CN `"10"`，JP `"6.8.0.50"`），按点分数字排序；`--asset-version`、`ripper.lock.json` 和报告里的 `assetVersion` 随之变为字符串。`ripper.lock.json` 新增 `region`。
+
+### 修复
+
+- `ripper-convert`：Transform 的动画绑定按分量展开成多条曲线（位置 3 / 旋转 4 / 缩放 3 / 欧拉角 3），修复部分特效 prefab 的 AnimationClip 报 “N bindings for M curves” 而转换失败的问题。
+
+### 项目
+
+- 公开到 GitHub（[StarMoe-org/SekaiStoryRipper](https://github.com/StarMoe-org/SekaiStoryRipper)）。
+- 架构决策整理为 ADR（`docs/adr/`），替代原来的规划文档。
+- CI 同时提供 GitHub Actions 与 Gitea Actions 配置，四个平台原生构建；推送 `v*` tag 时自动构建并发布 release。
 
 ## 0.1.0（2026-09-23）
 
@@ -42,8 +52,8 @@
 
 ### 已知限制
 
-- **二进制**：本版只附带 macOS arm64。Windows x64 和 Linux x64/arm64 需要在 Gitea 上注册 Gitea Actions runner 后由 CI 构建（`.gitea/workflows/ci.yml`）。
-- **HCA 解码未经独立验证**：cridecoder 的输出与 ffmpeg 相比极性相反，HCA v3 也还没有独立参考解码器验证（M0 报告 S6），留待 vgmstream 裁定。
+- **二进制**：本版只附带 macOS arm64。
+- **HCA 解码未经独立验证**：cridecoder 的输出与 ffmpeg 相比极性相反，HCA v3 也还没有独立参考解码器验证，留待 vgmstream 裁定。
 - **不在 v1 范围内的**：
   - 区域对话、角色自我介绍（计划 v1.1）；
   - MV（只在索引里留占位）；

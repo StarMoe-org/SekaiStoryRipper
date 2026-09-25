@@ -1,0 +1,71 @@
+# Builds release binaries for every supported platform when a `v*` tag is pushed and attaches
+# them to a GitHub release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-14, target: aarch64-apple-darwin }
+          - { runner: windows-latest, target: x86_64-pc-windows-msvc }
+          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-musl }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+    env:
+      CARGO_TERM_COLOR: always
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CC_aarch64_unknown_linux_musl: musl-gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install musl tools
+        if: contains(matrix.target, 'linux-musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Toolchain (pinned by rust-toolchain.toml)
+        run: rustup show && rustup target add ${{ matrix.target }}
+      - run: cargo build --release --locked -p ripper-cli --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          name=ripper-${GITHUB_REF_NAME}-${{ matrix.target }}
+          mkdir "$name"
+          cp README.md LICENSE-MIT LICENSE-APACHE ripper.example.toml "$name/"
+          if [ -f target/${{ matrix.target }}/release/ripper.exe ]; then
+            cp target/${{ matrix.target }}/release/ripper.exe "$name/"
+            7z a "$name.zip" "$name" > /dev/null
+          else
+            cp target/${{ matrix.target }}/release/ripper "$name/"
+            tar czf "$name.tar.gz" "$name"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ripper-${{ matrix.target }}
+          path: ripper-*.*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          awk -v v="$version" '$0 ~ "^## "v"( |（|$)" {on=1; next} /^## / && on {exit} on' CHANGELOG.md > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: dist/*

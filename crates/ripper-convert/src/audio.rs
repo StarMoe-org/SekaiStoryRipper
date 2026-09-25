@@ -1,4 +1,4 @@
-//! CRI ACB → one WAV per physical waveform + `ripper-acb` index + all UTF tables (decision D9).
+//! CRI ACB → one WAV per physical waveform + `ripper-acb` index + all UTF tables (ADR-0007).
 
 use std::collections::BTreeMap;
 use std::io::Cursor;

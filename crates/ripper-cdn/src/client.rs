@@ -43,7 +43,7 @@ pub enum CdnError {
     #[error("{url}: version file is not a number: {body:?}")]
     VersionFormat { url: String, body: String },
     #[error(
-        "no ABCrypt key configured; set RIPPER_AB_KEY/RIPPER_AB_IV or [crypto] in the config (D4)"
+        "no ABCrypt key configured; set RIPPER_AB_KEY/RIPPER_AB_IV or [crypto] in the config (ADR-0005)"
     )]
     MissingKey,
     #[error("JP login: {0}")]

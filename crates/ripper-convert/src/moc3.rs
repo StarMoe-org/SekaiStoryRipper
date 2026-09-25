@@ -1,4 +1,4 @@
-//! Parameter and part ids of a `.moc3`, needed to name AnimationClip bindings (decision D12).
+//! Parameter and part ids of a `.moc3`, needed to name AnimationClip bindings (ADR-0008).
 //!
 //! Only the id tables are read; the model itself is never evaluated here. Layout (little-endian
 //! unless the endian flag at byte 5 is set): magic `MOC3`, version byte at 4, then a section

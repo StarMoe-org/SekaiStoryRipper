@@ -1,4 +1,4 @@
-//! Decoded textures → PNG (decision D8). Pixels are written as decoded; no alpha conversion.
+//! Decoded textures → PNG (ADR-0007). Pixels are written as decoded; no alpha conversion.
 
 use ripper_unity::RgbaImage;
 

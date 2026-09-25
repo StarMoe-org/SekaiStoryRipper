@@ -1,10 +1,10 @@
 # Native build + lint + test on every supported platform (ADR-0010). The same matrix runs on
-# GitHub Actions from .github/workflows/ci.yml with GitHub-hosted runners.
-# Runners must be registered with the labels used in `runs-on` below.
+# Gitea Actions from .gitea/workflows/ci.yml with self-hosted runner labels.
 name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -15,13 +15,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { runner: macos-arm64, target: aarch64-apple-darwin }
-          - { runner: windows-x64, target: x86_64-pc-windows-msvc }
-          - { runner: linux-x64, target: x86_64-unknown-linux-musl }
-          - { runner: linux-arm64, target: aarch64-unknown-linux-musl }
+          - { runner: macos-14, target: aarch64-apple-darwin }
+          - { runner: windows-latest, target: x86_64-pc-windows-msvc }
+          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-musl }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
     env:
       CARGO_TERM_COLOR: always
-      # zstd-sys (via unity-rs-core) and ring (via rustls) compile C/asm and need a musl C compiler on Linux.
+      # zstd-sys and ring compile C/asm and need a musl C compiler on Linux.
       CC_x86_64_unknown_linux_musl: musl-gcc
       CC_aarch64_unknown_linux_musl: musl-gcc
     steps:
@@ -31,11 +31,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Toolchain (pinned by rust-toolchain.toml)
         run: rustup show && rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked --target ${{ matrix.target }} -- -D warnings
       - run: cargo test --workspace --locked --target ${{ matrix.target }}
       - run: cargo build --release --locked -p ripper-cli --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ripper-${{ matrix.target }}
           path: |

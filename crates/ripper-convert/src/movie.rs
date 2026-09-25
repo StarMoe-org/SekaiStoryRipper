@@ -1,4 +1,4 @@
-//! CRI USM demultiplexing (decision D13: demux only, no transcoding).
+//! CRI USM demultiplexing (ADR-0007: demux only, no transcoding).
 
 use std::io::Cursor;
 
@@ -65,8 +65,8 @@ pub fn demux_usm(usm: &[u8], fallback_name: &str) -> Result<Vec<UsmStream>> {
         .collect())
 }
 
-/// Converts a demultiplexed CRI ADX stream to PCM16 WAV with an external ffmpeg (decision: M5 uses
-/// ffmpeg for ADX; cridecoder only demultiplexes it).
+/// Converts a demultiplexed CRI ADX stream to PCM16 WAV with an external ffmpeg (cridecoder only
+/// demultiplexes it; ADR-0007).
 pub fn adx_to_wav(
     ffmpeg: &std::path::Path,
     adx: &std::path::Path,

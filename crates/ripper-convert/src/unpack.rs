@@ -85,7 +85,7 @@ fn write_file(dir: &Path, relative: &str, bytes: &[u8]) -> Result<()> {
 pub struct UnpackOptions {
     /// ffmpeg executable for movie ADX → WAV. `None` keeps the `.adx` only (with a note).
     pub ffmpeg: Option<std::path::PathBuf>,
-    /// Also write ASTC textures' original blocks as `<x>.astc` next to the PNG (decision D8).
+    /// Also write ASTC textures' original blocks as `<x>.astc` next to the PNG (ADR-0007).
     pub keep_astc: bool,
 }
 
@@ -432,7 +432,7 @@ pub fn unpack_bundle<B: BundleSource>(
     Ok(record)
 }
 
-/// Joins the USM parts of one `MovieBundleBuildData`, demultiplexes them (decision D13) and turns
+/// Joins the USM parts of one `MovieBundleBuildData`, demultiplexes them (ADR-0007) and turns
 /// the ADX audio into WAV with ffmpeg when one is configured.
 fn unpack_movie<B: BundleSource>(
     bundle: &B,

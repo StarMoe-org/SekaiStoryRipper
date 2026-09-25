@@ -12,4 +12,4 @@ uv run tools/oracle/library/compare.py cache out/library --report cache/library-
 - PNG：逐像素比较；Alpha8 格式只比 alpha，因为只有 alpha 通道有数据；
 - TextAsset：逐字节比较。
 
-退出码为 0 表示全部通过。只输出计数和差异，不写出任何资产内容（D5）。
+退出码为 0 表示全部通过。只输出计数和差异，不写出任何资产内容（ADR-0005）。

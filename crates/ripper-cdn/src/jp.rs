@@ -11,7 +11,7 @@
 //!    `Set-Cookie: CloudFront-Policy=…; CloudFront-Signature=…; CloudFront-Key-Pair-Id=…`.
 //!
 //! Every body is AES-128-CBC/PKCS#7 around msgpack with `APIManager.dummydata`/`stab`; JP has one
-//! key pair for the API and the manifest, supplied by the user like the CN manifest key (D4).
+//! key pair for the API and the manifest, supplied by the user like the CN manifest key (ADR-0005).
 
 use std::path::{Path, PathBuf};
 

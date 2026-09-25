@@ -24,7 +24,7 @@ pub struct Config {
     pub tools: ToolsConfig,
 }
 
-/// ABCrypt key/IV for the manifest (decision D4: never shipped, always user-supplied).
+/// ABCrypt key/IV for the manifest (ADR-0005: never shipped, always user-supplied).
 /// Each is the 16-character string or 32 hex digits. JP uses one key pair (`APIManager.Crypt`) for
 /// the manifest and the login API, so the same two values serve both.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -34,7 +34,7 @@ pub struct CryptoConfig {
     pub ab_iv: Option<String>,
 }
 
-/// Masterdata source (decision D15): `{name}` is replaced by the table name, e.g. `unitStories`.
+/// Masterdata source (ADR-0009): `{name}` is replaced by the table name, e.g. `unitStories`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct MasterdataConfig {
@@ -118,7 +118,7 @@ impl UnityConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ToolsConfig {
-    /// ffmpeg executable for ADX → WAV (M5). A bare name is looked up on PATH (`ffmpeg.exe` on Windows).
+    /// ffmpeg executable for ADX → WAV. A bare name is looked up on PATH (`ffmpeg.exe` on Windows).
     pub ffmpeg: PathBuf,
 }
 

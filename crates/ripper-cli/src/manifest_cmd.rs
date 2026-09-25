@@ -9,7 +9,7 @@ use crate::config::Config;
 
 pub struct Args {
     pub asset_version: Option<String>,
-    /// A manifest someone already decrypted (D4 compatibility): msgpack, or JSON `{"bundles": ...}`.
+    /// A manifest someone already decrypted (ADR-0005): msgpack, or JSON `{"bundles": ...}`.
     pub from_file: Option<PathBuf>,
     pub refresh: bool,
     pub diff_out: Option<PathBuf>,

@@ -25,7 +25,7 @@ pub struct Args {
 }
 
 /// Every Live2D parameter/part id seen in any unpacked moc3: `library/_index/live2d-ids.json`.
-/// Binding path hashes depend only on the id, so the union over all models resolves any clip (D12).
+/// Binding path hashes depend only on the id, so the union over all models resolves any clip (ADR-0008).
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct KnownIds {
     parameters: BTreeSet<String>,

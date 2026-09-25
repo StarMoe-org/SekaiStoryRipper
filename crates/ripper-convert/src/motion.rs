@@ -1,4 +1,4 @@
-//! `AnimationClip` typetree → `sse-motion` (decision D11), keeping StreamedClip coefficients as stored.
+//! `AnimationClip` typetree → `sse-motion` (ADR-0007), keeping StreamedClip coefficients as stored.
 //!
 //! Curve order follows Unity's muscle clip: streamed curves, then dense curves, then constant
 //! curves. Bindings map onto them in order; a `Transform` binding (`typeID` 4) covers several
@@ -127,10 +127,23 @@ fn transform_components(type_id: i64, attribute: u32) -> Option<&'static [&'stat
         return None;
     }
     Some(match attribute {
-        1 => &["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z"],
-        2 => &["m_LocalRotation.x", "m_LocalRotation.y", "m_LocalRotation.z", "m_LocalRotation.w"],
+        1 => &[
+            "m_LocalPosition.x",
+            "m_LocalPosition.y",
+            "m_LocalPosition.z",
+        ],
+        2 => &[
+            "m_LocalRotation.x",
+            "m_LocalRotation.y",
+            "m_LocalRotation.z",
+            "m_LocalRotation.w",
+        ],
         3 => &["m_LocalScale.x", "m_LocalScale.y", "m_LocalScale.z"],
-        4 => &["localEulerAnglesRaw.x", "localEulerAnglesRaw.y", "localEulerAnglesRaw.z"],
+        4 => &[
+            "localEulerAnglesRaw.x",
+            "localEulerAnglesRaw.y",
+            "localEulerAnglesRaw.z",
+        ],
         _ => return None,
     })
 }
@@ -437,10 +450,16 @@ mod tests {
     #[test]
     fn transform_bindings_expand_to_their_component_curves() {
         let names = transform_components(4, 1).unwrap();
-        assert_eq!(names, ["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z"]);
+        assert_eq!(
+            names,
+            [
+                "m_LocalPosition.x",
+                "m_LocalPosition.y",
+                "m_LocalPosition.z"
+            ]
+        );
         assert_eq!(transform_components(4, 2).unwrap().len(), 4);
         assert!(transform_components(224, 1).is_none());
         assert!(transform_components(4, 9).is_none());
     }
-
 }
