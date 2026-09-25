@@ -22,6 +22,8 @@ anyhow = "1"
 cbc = { version = "0.2", features = ["alloc"] }
 clap = { version = "4", features = ["derive"] }
 crc32fast = "1"
+# JP install id (already in the tree through ring).
+getrandom = "0.2"
 cridecoder = { version = "0.3.5", default-features = false }
 png = "0.18"
 rayon = "1"

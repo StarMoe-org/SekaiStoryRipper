@@ -28,7 +28,7 @@ use crate::unpack_cmd::unpack_entries;
 
 pub struct Args {
     pub selectors: Vec<String>,
-    pub asset_version: Option<u32>,
+    pub asset_version: Option<String>,
     /// Write every plan (plan) / a summary (rip) as JSON.
     pub report: Option<PathBuf>,
     /// Fail when any episode has warnings.
@@ -181,15 +181,15 @@ fn warning_counts<'a>(warnings: impl IntoIterator<Item = &'a Warning>) -> BTreeM
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PlanReport<'a> {
-    asset_version: u32,
+    asset_version: String,
     episodes: usize,
     missing_scenarios: Vec<&'a Warning>,
     warning_counts: BTreeMap<String, usize>,
     plans: Vec<&'a Plan>,
 }
 
-async fn prepare(config: &Config, args: &Args) -> Result<(u32, Manifest, Masterdata)> {
-    let (version, manifest) = load_manifest(config, args.asset_version)?;
+async fn prepare(config: &Config, args: &Args) -> Result<(String, Manifest, Masterdata)> {
+    let (version, manifest) = load_manifest(config, args.asset_version.as_deref())?;
     let masterdata = load_masterdata(config).await?;
     Ok((version, manifest, masterdata))
 }
@@ -290,8 +290,9 @@ fn part_voice_bundles(manifest: &Manifest) -> BTreeSet<String> {
 struct Lock {
     tool_version: &'static str,
     formats: BTreeMap<&'static str, u32>,
+    region: String,
     app_version: String,
-    asset_version: u32,
+    asset_version: String,
     unity_version: String,
     masterdata: serde_json::Value,
     episodes: Vec<String>,
@@ -300,7 +301,7 @@ struct Lock {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RipReport {
-    asset_version: u32,
+    asset_version: String,
     episodes: BTreeMap<String, RipEpisode>,
     warning_counts: BTreeMap<String, usize>,
 }
@@ -395,7 +396,7 @@ pub async fn run_rip(config: &Config, args: Args) -> Result<()> {
     );
 
     let mut report = RipReport {
-        asset_version: version,
+        asset_version: version.clone(),
         episodes: BTreeMap::new(),
         warning_counts: BTreeMap::new(),
     };
@@ -484,6 +485,7 @@ pub async fn run_rip(config: &Config, args: Args) -> Result<()> {
             ),
         ]
         .into(),
+        region: config.cdn.region.to_string(),
         app_version: config.cdn.app_version.clone(),
         asset_version: version,
         unity_version: config.unity.version.clone(),

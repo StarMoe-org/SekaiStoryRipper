@@ -1,7 +1,9 @@
 //! `AnimationClip` typetree → `sse-motion` (decision D11), keeping StreamedClip coefficients as stored.
 //!
 //! Curve order follows Unity's muscle clip: streamed curves, then dense curves, then constant
-//! curves; binding `i` of `m_ClipBindingConstant.genericBindings` belongs to curve `i`.
+//! curves. Bindings map onto them in order; a `Transform` binding (`typeID` 4) covers several
+//! consecutive curves — position 3, rotation (quaternion) 4, scale 3, Euler angles 3 — which
+//! become one curve each, named `m_LocalPosition.x` … with `attrHash = crc32(name)`.
 
 use std::collections::HashMap;
 
@@ -119,6 +121,20 @@ fn f32_array(value: &Value, what: &'static str) -> Result<Vec<f32>> {
 }
 
 /// Converts one clip. `meta` is the `Live2DBuildMotionMetaData` typetree of the same name, if any.
+/// The curves a `Transform` binding stands for (`typeID` 4, attribute 1–4), in Unity's order.
+fn transform_components(type_id: i64, attribute: u32) -> Option<&'static [&'static str]> {
+    if type_id != 4 {
+        return None;
+    }
+    Some(match attribute {
+        1 => &["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z"],
+        2 => &["m_LocalRotation.x", "m_LocalRotation.y", "m_LocalRotation.z", "m_LocalRotation.w"],
+        3 => &["m_LocalScale.x", "m_LocalScale.y", "m_LocalScale.z"],
+        4 => &["localEulerAnglesRaw.x", "localEulerAnglesRaw.y", "localEulerAnglesRaw.z"],
+        _ => return None,
+    })
+}
+
 pub fn clip_to_motion(
     clip: &Value,
     meta: Option<&Value>,
@@ -207,23 +223,37 @@ pub fn clip_to_motion(
     let bindings = field(clip, &["m_ClipBindingConstant", "genericBindings"])?
         .as_array()
         .ok_or_else(|| malformed("genericBindings", "expected an array"))?;
-    if bindings.len() != curve_data.len() {
+    // one entry per curve: (binding, attribute hash, attribute name)
+    let mut per_curve = Vec::with_capacity(curve_data.len());
+    for binding in bindings {
+        let attr_hash = as_u64(field(binding, &["attribute"])?, "binding.attribute")? as u32;
+        let type_id = field(binding, &["typeID"])?.as_i64().unwrap_or_default();
+        match transform_components(type_id, attr_hash) {
+            Some(names) => {
+                for name in names {
+                    per_curve.push((binding, crc32fast::hash(name.as_bytes()), Some(*name)));
+                }
+            }
+            None => per_curve.push((binding, attr_hash, attribute_name(attr_hash))),
+        }
+    }
+    if per_curve.len() != curve_data.len() {
         return Err(malformed(
             "AnimationClip",
             format!(
-                "{} bindings for {} curves in {}",
+                "{} bindings ({} curves) for {} curves in {}",
                 bindings.len(),
+                per_curve.len(),
                 curve_data.len(),
                 source.bundle
             ),
         ));
     }
-    let curves = bindings
-        .iter()
+    let curves = per_curve
+        .into_iter()
         .zip(curve_data)
-        .map(|(binding, data)| {
+        .map(|((binding, attr_hash, attr), data)| {
             let path_hash = as_u64(field(binding, &["path"])?, "binding.path")? as u32;
-            let attr_hash = as_u64(field(binding, &["attribute"])?, "binding.attribute")? as u32;
             Ok(Curve {
                 binding: Binding {
                     path_hash,
@@ -233,7 +263,7 @@ pub fn clip_to_motion(
                         .as_u64()
                         .unwrap_or_default() as u8,
                     resolved: names.resolve(path_hash),
-                    attr: attribute_name(attr_hash).map(str::to_owned),
+                    attr: attr.map(str::to_owned),
                 },
                 data,
             })
@@ -403,4 +433,14 @@ mod tests {
         });
         assert!(clip_to_motion(&clip, None, &BindingNames::default(), source()).is_err());
     }
+
+    #[test]
+    fn transform_bindings_expand_to_their_component_curves() {
+        let names = transform_components(4, 1).unwrap();
+        assert_eq!(names, ["m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z"]);
+        assert_eq!(transform_components(4, 2).unwrap().len(), 4);
+        assert!(transform_components(224, 1).is_none());
+        assert!(transform_components(4, 9).is_none());
+    }
+
 }

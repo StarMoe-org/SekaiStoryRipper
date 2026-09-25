@@ -1,5 +1,19 @@
 # Changelog
 
+## 未发布
+
+### 日服（JP 6.8.1）
+
+- 新增 `--region jp`（或配置里的 `cdn.region = "jp"`）。区服决定整套默认值：CDN、masterdata（`haruki-sekai-master`）、Unity 版本（2022.3.62f2），以及独立的 `cache/jp`、`out/jp` 目录。配置文件叠加在区服预设之上，命令行的 `--region` 优先。
+- 日服 CDN 只认 CloudFront 签名 cookie。工具按游戏新装流程登录：版本 API → 注册游客账号（只注册一次，账号存在 `<cache>/account.json`）→ `PUT user/{id}/auth` → `POST api/signature` 取 cookie。版本号和 assetHash 取自登录响应。
+- 日服只有一对 AES key（`APIManager.Crypt`），同时用于 API 和清单，仍由用户通过 `RIPPER_AB_KEY` / `RIPPER_AB_IV` 提供（D4）。
+- 清单 URL 为 `…/api/version/{assetVersion}/{assetHash}/os/ios`，bundle URL 为 `{host}/{assetVersion}/{assetHash}/ios/{bundleName}`。日服清单没有 `downloadPath`，由清单库里的 `.meta.json`（记录 assetHash）在加载时补上。
+- 日服 CDN 上有少数 bundle 与清单里的 `fileSize`/`crc` 不一致（内容完整，只是另一版）。游戏自身不校验这两项（`AssetBundleDownloadHandler` 只拿 `fileSize` 定缓冲区），所以日服下载只校验 `Content-Length` 和能否解压，CRC 不符只打印提示，缓存也不按大小判定。
+
+### 变更
+
+- asset version 改为字符串（CN `"10"`，JP `"6.8.0.50"`），按点分数字排序；`--asset-version`、`ripper.lock.json` 和报告里的 `assetVersion` 随之变为字符串。`ripper.lock.json` 新增 `region`。
+
 ## 0.1.0（2026-09-23）
 
 首个可用版本：从 CN 6.4.0 iOS CDN 抓取剧情回放所需的全部资源，并无损解包成 SekaiStoryExporter 可以直接读取的 library。

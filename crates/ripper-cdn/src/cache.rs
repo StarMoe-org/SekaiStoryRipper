@@ -3,6 +3,8 @@
 //! The key is `(bundleName, crc)`, so a bundle that changes on the CDN gets a new file and the
 //! old one stays valid for older manifests. Writes go to a temp file in the same directory and
 //! are renamed into place, so an interrupted download never leaves a truncated cache entry.
+//! An entry's size is also checked against the manifest, except for JP, whose CDN serves some
+//! bundles at a different size than the manifest says (see `CdnClient::bundle`).
 
 use std::fs;
 use std::io;
@@ -21,13 +23,25 @@ pub enum CacheError {
 
 pub struct BundleCache {
     root: PathBuf,
+    check_size: bool,
 }
 
 impl BundleCache {
     pub fn new(cache_root: impl Into<PathBuf>) -> Self {
         Self {
             root: cache_root.into().join("bundles"),
+            check_size: true,
         }
+    }
+
+    /// Trusts any present entry (atomic writes already rule out partial files).
+    pub fn without_size_check(mut self) -> Self {
+        self.check_size = false;
+        self
+    }
+
+    fn size_ok(&self, len: u64, entry: &BundleEntry) -> bool {
+        !self.check_size || len == entry.file_size
     }
 
     pub fn path(&self, entry: &BundleEntry) -> Result<PathBuf, CacheError> {
@@ -49,7 +63,7 @@ impl BundleCache {
     pub fn get(&self, entry: &BundleEntry) -> Result<Option<Vec<u8>>, CacheError> {
         let path = self.path(entry)?;
         match fs::read(&path) {
-            Ok(data) if data.len() as u64 == entry.file_size => Ok(Some(data)),
+            Ok(data) if self.size_ok(data.len() as u64, entry) => Ok(Some(data)),
             Ok(_) => Ok(None),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(source) => Err(CacheError::Io { path, source }),
@@ -58,7 +72,7 @@ impl BundleCache {
 
     pub fn contains(&self, entry: &BundleEntry) -> Result<bool, CacheError> {
         let path = self.path(entry)?;
-        Ok(fs::metadata(&path).is_ok_and(|m| m.len() == entry.file_size))
+        Ok(fs::metadata(&path).is_ok_and(|m| self.size_ok(m.len(), entry)))
     }
 
     pub fn put(&self, entry: &BundleEntry, unityfs: &[u8]) -> Result<PathBuf, CacheError> {

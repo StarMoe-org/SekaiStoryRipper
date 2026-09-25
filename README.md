@@ -1,13 +1,13 @@
 # SekaiStoryRipper
 
-为 **Project Sekai（CN 服 6.4.0，Unity 2022.3.62f3，iOS）** 的剧情回放抓取并解包所需资产的独立工具。
+为 **Project Sekai（CN 服 6.4.0 / 日服 6.8.1，iOS）** 的剧情回放抓取并解包所需资产的独立工具。
 下游消费者是 [SekaiStoryExporter](https://github.com/StarMoe-org/SekaiStoryExporter)（sse）。
 
 > 状态：**v0.1.0**：可以按剧集导出剧情回放所需的全部资源（主线、活动、卡面、特别篇）。M0 结论见 [`docs/spike/M0-report.md`](docs/spike/M0-report.md)。方案与全部已拍板决策见 [`docs/plan.md`](docs/plan.md)。
 
 ## 做什么
 
-1. 从 CN CDN 匿名拉取 AssetBundle，完成反混淆、校验和缓存；
+1. 从 CN CDN 匿名拉取、或以日服游客账号登录后拉取 AssetBundle，完成反混淆、校验和缓存；
 2. 根据 masterdata 和剧本，反推出某一话需要哪些 bundle；
 3. 把 bundle 解成 sse 可以直接消费的**无损、版本化**中间格式。动作（AnimationClip）保留 StreamedClip 的原始多项式系数，**不转成 motion3**。
 
@@ -21,6 +21,14 @@ ripper manifest                              # 拉取并归档清单（每次游
 ripper rip unit:school-refusal-story-chapter/1 event:120 card:1 special:2
 ripper rip unit:all --report rip-report.json
 ripper plan all --report plan.json           # 只做规划：列出需要的 bundle 和 warning，不下载资源本体
+```
+
+日服：加 `--region jp`（或在配置里写 `[cdn] region = "jp"`）。首次运行会注册一个游客账号并存到 `cache/jp/account.json`，之后复用；key 同样通过 `RIPPER_AB_KEY` / `RIPPER_AB_IV` 提供（日服 API 和清单共用一对）。输出在 `out/jp/`。
+
+```bash
+ripper --region jp manifest
+ripper --region jp masterdata
+ripper --region jp rip unit:school-refusal-story-chapter/1
 ```
 
 选择器：`unit:<章节 assetbundleName>[/<话>]`、`event:<eventId>[/<话 或 范围 1-4>]`、`card:<cardId>[/first|second]`、`special:<specialStoryId>[/<话>]`、`scenario:<scenarioId>`、`unit:all`、`all`。

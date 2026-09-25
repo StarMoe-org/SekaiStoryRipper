@@ -16,12 +16,16 @@ use crate::config::Config;
 #[command(
     name = "ripper",
     version,
-    about = "Project Sekai (CN) story asset ripper"
+    about = "Project Sekai (CN, JP) story asset ripper"
 )]
 struct Cli {
     /// Config file (default: ./ripper.toml when present). See ripper.example.toml.
     #[arg(long, global = true)]
     config: Option<PathBuf>,
+    /// Game server: cn or jp (default: cdn.region in the config, else cn). Picks the preset
+    /// defaults, including separate cache/out directories for JP.
+    #[arg(long, global = true, value_parser = parse_region)]
+    region: Option<ripper_cdn::Region>,
     /// Override paths.cache.
     #[arg(long, global = true)]
     cache: Option<PathBuf>,
@@ -36,9 +40,10 @@ struct Cli {
 enum Command {
     /// Fetch the current manifest (or import a decrypted one), archive it and diff it against the last one.
     Manifest {
-        /// Use ios{N} instead of reading the CDN version file.
+        /// Use this asset version (CN `N` of ios{N}, JP e.g. 6.8.0.50 with cdn.jp.asset_hash)
+        /// instead of asking the server.
         #[arg(long)]
-        asset_version: Option<u32>,
+        asset_version: Option<String>,
         /// Import an already decrypted manifest (msgpack, or JSON with a `bundles` map) instead of fetching.
         #[arg(long)]
         from_file: Option<PathBuf>,
@@ -55,7 +60,7 @@ enum Command {
         #[arg(required = true)]
         selectors: Vec<String>,
         #[arg(long)]
-        asset_version: Option<u32>,
+        asset_version: Option<String>,
         /// Write every plan as JSON.
         #[arg(long)]
         report: Option<PathBuf>,
@@ -68,7 +73,7 @@ enum Command {
         #[arg(required = true)]
         selectors: Vec<String>,
         #[arg(long)]
-        asset_version: Option<u32>,
+        asset_version: Option<String>,
         /// Write a per-episode summary as JSON.
         #[arg(long)]
         report: Option<PathBuf>,
@@ -97,7 +102,7 @@ enum Command {
         prefixes: Vec<String>,
         /// Use this archived manifest instead of the latest.
         #[arg(long)]
-        asset_version: Option<u32>,
+        asset_version: Option<String>,
         /// Do not follow manifest `dependencies`.
         #[arg(long)]
         no_deps: bool,
@@ -111,7 +116,7 @@ enum Command {
         #[arg(long = "prefix")]
         prefixes: Vec<String>,
         #[arg(long)]
-        asset_version: Option<u32>,
+        asset_version: Option<String>,
         /// Do not follow manifest `dependencies`.
         #[arg(long)]
         no_deps: bool,
@@ -124,10 +129,18 @@ enum Command {
     },
 }
 
+fn parse_region(text: &str) -> Result<ripper_cdn::Region, String> {
+    match text {
+        "cn" => Ok(ripper_cdn::Region::Cn),
+        "jp" => Ok(ripper_cdn::Region::Jp),
+        _ => Err(format!("unknown region {text:?} (cn or jp)")),
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let mut config = Config::load(cli.config.as_deref())?;
+    let mut config = Config::load(cli.config.as_deref(), cli.region)?;
     if let Some(cache) = cli.cache {
         config.paths.cache = cache;
     }
