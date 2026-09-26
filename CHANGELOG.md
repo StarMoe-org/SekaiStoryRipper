@@ -1,10 +1,16 @@
 # Changelog
 
-## 未发布
+## 0.3.0（2026-09-26）
+
+### 格式（不兼容：library 需用本版本重新导出）
+
+- **存储即接口**（ADR-0013）：`ripper.lock.json` 成为 `ripper-lock` v1，带上 `format` / `version`；其中 `formats` 表列出全部格式（`ripper_format::formats()`），读取方打开 library 时要逐项比对。
+- **`_objects.json` 成为 `ripper-objects` v1**：外层改为 `{format, version, objects}`，每个对象仍是 `{classId, name, tree}`。
+- `ripper-unpack` 升到 v3：v2 新增 `_textures/`（见下方），v3 的 `_objects.json` 为 `ripper-objects` 文档。已解包的 bundle 会重新解包一次。
 
 ### 新增
 
-- **特效 prefab 的依赖贴图**：带 GameObject 的 bundle 里没有 container 路径的 Texture2D（例如 SpriteMask 引用的 `Square`）也会输出，路径为 `_textures/<名字>.<pathId>.png`。`ripper-unpack` 升到 v2，已解包的 bundle 会重新解包一次。
+- **特效 prefab 的依赖贴图**：带 GameObject 的 bundle 里没有 container 路径的 Texture2D（例如 SpriteMask 引用的 `Square`）也会输出，路径为 `_textures/<名字>.<pathId>.png`。
 - **输出到 S3**：`--out s3://bucket/prefix`（或 `paths.out`）把 library、episode 索引和 lock 发布到 AWS S3 或兼容服务（MinIO、R2 等）。先写本地暂存再增量上传（台账记录 SHA-256，未变化不重传）；暂存为空时从 S3 回填 record 与 JSON，已发布的 bundle 不会重复解包。新增配置段 `[s3]`（endpoint / region / addressing_style / concurrency），凭据只从 `AWS_*` 环境变量读取。见 ADR-0012。
 
 ## 0.2.0（2026-09-25）

@@ -12,7 +12,7 @@
 //!
 //! `Live2DBuildMotionMetaData` objects are folded into their clip and not written separately.
 //!
-//! Bundles with GameObjects (effect prefabs) also get `_objects.json` (the whole object graph) and
+//! Bundles with GameObjects (effect prefabs) also get `_objects.json` (`ripper-objects`, the whole object graph) and
 //! `_textures/<name>.<pathId>.png` for Texture2D objects without a container path.
 
 use std::collections::{BTreeMap, HashSet};
@@ -20,6 +20,7 @@ use std::fs;
 use std::path::Path;
 
 use ripper_format::motion::Source;
+use ripper_format::objects as object_graph;
 use ripper_format::unpack::{self, FileKind, UnpackRecord, UnpackedFile};
 use ripper_unity::{BundleSource, ContainerEntry, ObjectInfo, class_id};
 use serde_json::Value;
@@ -433,21 +434,29 @@ pub fn unpack_bundle<B: BundleSource>(
             }
         }
 
-        let mut graph = serde_json::Map::new();
+        let mut graph = ripper_format::ObjectGraph {
+            format: object_graph::FORMAT.into(),
+            version: object_graph::VERSION,
+            objects: BTreeMap::new(),
+        };
         for object in objects.values() {
             let tree = bundle
                 .typetree_json(object.id)
                 .unwrap_or_else(|e| serde_json::json!({ "error": e.to_string() }));
-            graph.insert(
+            graph.objects.insert(
                 object.id.path_id.to_string(),
-                serde_json::json!({ "classId": object.class_id, "name": object.name, "tree": tree }),
+                object_graph::Object {
+                    class_id: object.class_id,
+                    name: object.name.clone(),
+                    tree,
+                },
             );
         }
         let bytes = json_bytes(&graph, "object graph")?;
         writer.emit(
             "",
             0,
-            ("_objects.json".into(), FileKind::ObjectGraph, bytes),
+            (object_graph::FILE.into(), FileKind::ObjectGraph, bytes),
         )?;
     }
 
@@ -717,6 +726,13 @@ mod tests {
             ]
         );
         assert!(dir.path().join("_textures/texture.3.png").is_file());
+        let graph: ripper_format::ObjectGraph<Value> =
+            serde_json::from_slice(&fs::read(dir.path().join("_objects.json")).unwrap()).unwrap();
+        assert_eq!(
+            (graph.format.as_str(), graph.version),
+            ("ripper-objects", 1)
+        );
+        assert_eq!(graph.objects["1"].class_id, class_id::GAME_OBJECT);
     }
 
     #[test]

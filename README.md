@@ -71,7 +71,7 @@ ripper --region jp rip unit:school-refusal-story-chapter/1
 输出：
 - `out/library/<bundleName>/…`：解包后的资源，布局见下文；
 - `out/episodes/<type>/<key>/<no>.json`：`ripper-episode` v1 索引，给出这一话用到的剧本、角色（模型、动作包、按游戏规则解析好的「动作名 → clip」）、背景、BGM、SE、语音、影片、特效，路径都相对 `out/library/`；
-- `out/ripper.lock.json`：本次导出所用的工具版本、各格式版本、app/CDN/Unity 版本和 masterdata 来源。
+- `out/ripper.lock.json`：本次导出所用的工具版本、各格式版本（`formats`，读取方据此校验，见 ADR-0013）、app/CDN/Unity 版本和 masterdata 来源。
 
 底层命令：
 
@@ -101,7 +101,7 @@ ripper unpack --keep-astc scenario/background/bg_a000001                       #
 | ACB | 原始 `.acb`、`.cues.json`、`.tables.json`，以及 `.audio/` 下每个 waveform 一个 WAV |
 | 影片 | `.m2v` 和 `.adx`，另有经 ffmpeg 转出的 `.wav` |
 | Font | `.otf` / `.ttf` |
-| 其他对象 | typetree JSON（带 GameObject 的 bundle 还会有 `_objects.json`） |
+| 其他对象 | typetree JSON（带 GameObject 的 bundle 还会有 `_objects.json` 对象图和 `_textures/` 依赖贴图） |
 
 每个 bundle 目录里的 `_ripper.json` 记录了文件清单和来源 crc。
 

@@ -17,5 +17,6 @@
 | [0010](0010-cross-platform.md) | 跨平台构建 | accepted |
 | [0011](0011-regions.md) | 区服：CN 匿名 CDN 与日服游客登录 | accepted |
 | [0012](0012-s3-output.md) | S3 作为输出存储 | accepted |
+| [0013](0013-storage-contract.md) | 存储即接口：library + `ripper-format` + `formats` 表 | accepted |
 
 模板见 [`0000-template.md`](0000-template.md)。

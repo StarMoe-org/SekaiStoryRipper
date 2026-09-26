@@ -1362,7 +1362,7 @@ dependencies = [
 
 [[package]]
 name = "ripper-cdn"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "aes",
  "cbc",
@@ -1382,7 +1382,7 @@ dependencies = [
 
 [[package]]
 name = "ripper-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1406,7 +1406,7 @@ dependencies = [
 
 [[package]]
 name = "ripper-convert"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "crc32fast",
  "cridecoder",
@@ -1421,7 +1421,7 @@ dependencies = [
 
 [[package]]
 name = "ripper-format"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "ripper-resolve"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ripper-format",
  "serde",
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "ripper-unity"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "crc32fast",
  "serde_json",
