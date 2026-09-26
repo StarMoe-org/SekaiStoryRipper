@@ -11,6 +11,9 @@
 //! | anything else | embedded typetree as JSON (`x.asset` → `x.json`, `x.prefab` → `x.prefab.json`) |
 //!
 //! `Live2DBuildMotionMetaData` objects are folded into their clip and not written separately.
+//!
+//! Bundles with GameObjects (effect prefabs) also get `_objects.json` (the whole object graph) and
+//! `_textures/<name>.<pathId>.png` for Texture2D objects without a container path.
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -407,6 +410,29 @@ pub fn unpack_bundle<B: BundleSource>(
         .values()
         .any(|o| o.class_id == class_id::GAME_OBJECT)
     {
+        // Textures only reachable through the graph (e.g. a `SpriteMask`'s built-in `Square`
+        // sprite) have no container path: `_textures/<name>.<pathId>.png`.
+        let listed: HashSet<i64> = assets.iter().map(|a| a.id.path_id).collect();
+        for object in objects.values() {
+            if object.class_id != class_id::TEXTURE_2D || listed.contains(&object.id.path_id) {
+                continue;
+            }
+            let label = object
+                .name
+                .as_deref()
+                .filter(|n| !n.is_empty() && ripper_format::path::component_problem(n).is_none())
+                .unwrap_or("texture");
+            let path = format!("_textures/{label}.{}.png", object.id.path_id);
+            match bundle
+                .texture_rgba(object.id)
+                .map_err(ConvertError::from)
+                .and_then(|image| encode_png(&image))
+            {
+                Ok(png) => writer.emit("", object.id.path_id, (path, FileKind::Png, png))?,
+                Err(error) => writer.record.skipped.push(format!("{path}: {error}")),
+            }
+        }
+
         let mut graph = serde_json::Map::new();
         for object in objects.values() {
             let tree = bundle
