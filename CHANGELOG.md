@@ -4,6 +4,7 @@
 
 ### 新增
 
+- **特效 prefab 的依赖贴图**：带 GameObject 的 bundle 里没有 container 路径的 Texture2D（例如 SpriteMask 引用的 `Square`）也会输出，路径为 `_textures/<名字>.<pathId>.png`。`ripper-unpack` 升到 v2，已解包的 bundle 会重新解包一次。
 - **输出到 S3**：`--out s3://bucket/prefix`（或 `paths.out`）把 library、episode 索引和 lock 发布到 AWS S3 或兼容服务（MinIO、R2 等）。先写本地暂存再增量上传（台账记录 SHA-256，未变化不重传）；暂存为空时从 S3 回填 record 与 JSON，已发布的 bundle 不会重复解包。新增配置段 `[s3]`（endpoint / region / addressing_style / concurrency），凭据只从 `AWS_*` 环境变量读取。见 ADR-0012。
 
 ## 0.2.0（2026-09-25）

@@ -11,6 +11,9 @@
 //! | anything else | embedded typetree as JSON (`x.asset` → `x.json`, `x.prefab` → `x.prefab.json`) |
 //!
 //! `Live2DBuildMotionMetaData` objects are folded into their clip and not written separately.
+//!
+//! Bundles with GameObjects (effect prefabs) also get `_objects.json` (the whole object graph) and
+//! `_textures/<name>.<pathId>.png` for Texture2D objects without a container path.
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -407,6 +410,29 @@ pub fn unpack_bundle<B: BundleSource>(
         .values()
         .any(|o| o.class_id == class_id::GAME_OBJECT)
     {
+        // Textures only reachable through the graph (e.g. a `SpriteMask`'s built-in `Square`
+        // sprite) have no container path: `_textures/<name>.<pathId>.png`.
+        let listed: HashSet<i64> = assets.iter().map(|a| a.id.path_id).collect();
+        for object in objects.values() {
+            if object.class_id != class_id::TEXTURE_2D || listed.contains(&object.id.path_id) {
+                continue;
+            }
+            let label = object
+                .name
+                .as_deref()
+                .filter(|n| !n.is_empty() && ripper_format::path::component_problem(n).is_none())
+                .unwrap_or("texture");
+            let path = format!("_textures/{label}.{}.png", object.id.path_id);
+            match bundle
+                .texture_rgba(object.id)
+                .map_err(ConvertError::from)
+                .and_then(|image| encode_png(&image))
+            {
+                Ok(png) => writer.emit("", object.id.path_id, (path, FileKind::Png, png))?,
+                Err(error) => writer.record.skipped.push(format!("{path}: {error}")),
+            }
+        }
+
         let mut graph = serde_json::Map::new();
         for object in objects.values() {
             let tree = bundle
@@ -586,7 +612,8 @@ mod tests {
                     },
                     class_id: *class,
                     name: None,
-                    container: Some((*container).into()),
+                    // "" stands for an object outside m_Container
+                    container: (!container.is_empty()).then(|| (*container).into()),
                 })
                 .collect()
         }
@@ -621,6 +648,7 @@ mod tests {
             Ok(self
                 .0
                 .iter()
+                .filter(|(_, _, container, _, _)| !container.is_empty())
                 .map(|(id, _, container, _, _)| ContainerEntry {
                     path: (*container).into(),
                     id: ObjectId {
@@ -643,6 +671,52 @@ mod tests {
             "m_ClipBindingConstant": {"genericBindings": [{"path": 42, "attribute": 1, "typeID": 114, "customType": 0}]},
             "m_Events": []
         })
+    }
+
+    #[test]
+    fn effect_bundles_keep_the_object_graph_and_textures_outside_the_container() {
+        let bundle = Fake(vec![
+            (
+                1,
+                class_id::GAME_OBJECT,
+                "assets/x/scenario/effect/e/e.prefab",
+                serde_json::json!({"m_Name": "e"}),
+                vec![],
+            ),
+            (
+                2,
+                class_id::TEXTURE_2D,
+                "assets/x/scenario/effect/e/tex.png",
+                Value::Null,
+                vec![],
+            ),
+            (3, class_id::TEXTURE_2D, "", Value::Null, vec![]),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let record = unpack_bundle(
+            &bundle,
+            "scenario/effect/e",
+            1,
+            &BindingNames::default(),
+            dir.path(),
+            &UnpackOptions::default(),
+        )
+        .unwrap();
+        let files: Vec<(&str, i64)> = record
+            .files
+            .iter()
+            .map(|f| (f.path.as_str(), f.path_id))
+            .collect();
+        assert_eq!(
+            files,
+            [
+                ("e.prefab.json", 1),
+                ("tex.png", 2),
+                ("_textures/texture.3.png", 3),
+                ("_objects.json", 0),
+            ]
+        );
+        assert!(dir.path().join("_textures/texture.3.png").is_file());
     }
 
     #[test]
