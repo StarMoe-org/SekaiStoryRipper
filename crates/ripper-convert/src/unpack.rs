@@ -612,7 +612,8 @@ mod tests {
                     },
                     class_id: *class,
                     name: None,
-                    container: Some((*container).into()),
+                    // "" stands for an object outside m_Container
+                    container: (!container.is_empty()).then(|| (*container).into()),
                 })
                 .collect()
         }
@@ -647,6 +648,7 @@ mod tests {
             Ok(self
                 .0
                 .iter()
+                .filter(|(_, _, container, _, _)| !container.is_empty())
                 .map(|(id, _, container, _, _)| ContainerEntry {
                     path: (*container).into(),
                     id: ObjectId {
@@ -669,6 +671,52 @@ mod tests {
             "m_ClipBindingConstant": {"genericBindings": [{"path": 42, "attribute": 1, "typeID": 114, "customType": 0}]},
             "m_Events": []
         })
+    }
+
+    #[test]
+    fn effect_bundles_keep_the_object_graph_and_textures_outside_the_container() {
+        let bundle = Fake(vec![
+            (
+                1,
+                class_id::GAME_OBJECT,
+                "assets/x/scenario/effect/e/e.prefab",
+                serde_json::json!({"m_Name": "e"}),
+                vec![],
+            ),
+            (
+                2,
+                class_id::TEXTURE_2D,
+                "assets/x/scenario/effect/e/tex.png",
+                Value::Null,
+                vec![],
+            ),
+            (3, class_id::TEXTURE_2D, "", Value::Null, vec![]),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let record = unpack_bundle(
+            &bundle,
+            "scenario/effect/e",
+            1,
+            &BindingNames::default(),
+            dir.path(),
+            &UnpackOptions::default(),
+        )
+        .unwrap();
+        let files: Vec<(&str, i64)> = record
+            .files
+            .iter()
+            .map(|f| (f.path.as_str(), f.path_id))
+            .collect();
+        assert_eq!(
+            files,
+            [
+                ("e.prefab.json", 1),
+                ("tex.png", 2),
+                ("_textures/texture.3.png", 3),
+                ("_objects.json", 0),
+            ]
+        );
+        assert!(dir.path().join("_textures/texture.3.png").is_file());
     }
 
     #[test]
