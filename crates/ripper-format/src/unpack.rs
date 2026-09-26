@@ -1,4 +1,4 @@
-//! `ripper-unpack` v2: the record written next to every unpacked bundle in the library.
+//! `ripper-unpack` v3: the record written next to every unpacked bundle in the library.
 //!
 //! Library layout: `library/<bundleName>/<container path relative to the bundle's root>`, so
 //! relative references inside the assets (e.g. `model3.json` → `…/texture_00.png`) keep working.
@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 
 pub const FORMAT: &str = "ripper-unpack";
 /// v2: effect bundles also carry `_textures/` (Texture2D objects without a container path).
-pub const VERSION: u32 = 2;
+/// v3: their `_objects.json` is a `ripper-objects` document.
+pub const VERSION: u32 = 3;
 /// File name of the record inside `library/<bundleName>/`.
 pub const RECORD_FILE: &str = "_ripper.json";
 

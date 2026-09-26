@@ -218,7 +218,7 @@ impl RemoteOut {
         collect(&self.staging, &self.staging, &mut files)?;
         files.retain(|f| f != LEDGER_FILE);
         let phase = |f: &String| {
-            if f == "ripper.lock.json" {
+            if f == ripper_format::lock::FILE {
                 4
             } else if f.starts_with("episodes/") {
                 3

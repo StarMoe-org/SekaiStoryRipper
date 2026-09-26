@@ -287,19 +287,6 @@ fn part_voice_bundles(manifest: &Manifest) -> BTreeSet<String> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Lock {
-    tool_version: &'static str,
-    formats: BTreeMap<&'static str, u32>,
-    region: String,
-    app_version: String,
-    asset_version: String,
-    unity_version: String,
-    masterdata: serde_json::Value,
-    episodes: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct RipReport {
     asset_version: String,
     episodes: BTreeMap<String, RipEpisode>,
@@ -467,24 +454,11 @@ pub async fn run_rip(config: &Config, args: Args) -> Result<()> {
     }
     report.warning_counts = warning_counts(report.episodes.values().flat_map(|e| &e.warnings));
 
-    let lock = Lock {
-        tool_version: env!("CARGO_PKG_VERSION"),
-        formats: [
-            (
-                ripper_format::motion::FORMAT,
-                ripper_format::motion::VERSION,
-            ),
-            (
-                ripper_format::unpack::FORMAT,
-                ripper_format::unpack::VERSION,
-            ),
-            (ripper_format::audio::FORMAT, ripper_format::audio::VERSION),
-            (
-                ripper_format::episode::FORMAT,
-                ripper_format::episode::VERSION,
-            ),
-        ]
-        .into(),
+    let lock = ripper_format::Lock {
+        format: ripper_format::lock::FORMAT.into(),
+        version: ripper_format::lock::VERSION,
+        tool_version: env!("CARGO_PKG_VERSION").into(),
+        formats: ripper_format::formats(),
         region: config.cdn.region.to_string(),
         app_version: config.cdn.app_version.clone(),
         asset_version: version,
@@ -496,7 +470,7 @@ pub async fn run_rip(config: &Config, args: Args) -> Result<()> {
         episodes: written.clone(),
     };
     std::fs::write(
-        config.paths.out.join("ripper.lock.json"),
+        config.paths.out.join(ripper_format::lock::FILE),
         serde_json::to_vec_pretty(&lock)?,
     )?;
 
